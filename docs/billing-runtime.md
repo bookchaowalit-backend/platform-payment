@@ -3,7 +3,9 @@
 Correlation `SHARED-INFRA-2026-10-15`. This staged extension adds subscription
 Checkout, subscription lifecycle, invoice records and refunds. It uses provider
 Billing APIs for recurring charging; no application renewal loop creates raw
-PaymentIntents. No live mode, actual provider call or production acceptance is
+PaymentIntents. The supported Stripe Python SDK is pinned to **14.4.1**, with API version
+`2026-08-26.dahlia`; SDK 15.x is outside this reviewed release.
+No live mode, actual provider call or production acceptance is
 included. Invoice records are provider metadata, not an accounting ledger or
 tax filing system.
 

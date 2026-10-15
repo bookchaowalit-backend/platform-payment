@@ -152,3 +152,27 @@ period delivery orders and disabled/retired configuration are covered.
 The four focused regressions passed after the fixes. Complete suite: 70 passed,
 no skips; original check: 36 passed; wheel build and whitespace checks passed.
 Migration001 and migration002 SQL are unchanged by these corrections.
+
+## Release packaging correction: exact Stripe SDK pin
+
+The fresh Python 3.12 release bundle resolved Stripe 15.6.1 under the former
+`>=14.4,<16` dependency. Parent verification recorded a meaningful RED:
+68 passed and two existing signed-event tests failed because Stripe 15 Event
+objects no longer provide the dictionary `.get` interface used by this reviewed
+adapter. This was a dependency compatibility failure, not a reason to relax
+raw-body signature or live-mode checks.
+
+The distribution now requires `stripe==14.4.1`, matching the previously tested
+SDK, with the existing explicit API version `2026-08-26.dahlia`. No runtime code,
+webhook verification or tests changed for this correction. A dependency-resolving
+local payment install in the parent Python 3.12 environment downgraded only Stripe
+15.6.1 to 14.4.1 and reinstalled platform-payment; other dependencies were already
+satisfied. Installed metadata and the rebuilt wheel both declare the exact pin.
+
+Fresh complete PostgreSQL-backed runs passed **70 tests on Python 3.12 and 70 on
+Python 3.14**, without skips. The original `bash scripts/check.sh` passed all 36
+tests under each interpreter. Payment wheel builds and whitespace checks passed.
+The existing Starlette HTTPX2 deprecation warning remains. SDK 15 compatibility
+is outside this release and requires a separately reviewed upgrade; no paid
+providers, API upgrade or live-mode change occurred. Parent rebuilds the complete
+hashed offline bundle from this corrected dependency declaration.

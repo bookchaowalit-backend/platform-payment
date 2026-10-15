@@ -131,6 +131,7 @@ interpretation is not inferred from these states.
 
 ## Real Stripe adapter
 
+Supports **Stripe Python SDK 14.4.1 exactly**, pinned in the distribution.
 Uses `StripeClient`, explicit API version `2026-08-26.dahlia`, bounded HTTPX
 synchronous transport (5 seconds, one network retry), provider idempotency
 options and Checkout Sessions for on-session checkout. Dynamic payment methods
@@ -172,3 +173,7 @@ database and NOSUPERUSER NOBYPASSRLS role, applies migrations as its admin, gran
 the runtime schema, then connects the application only as that restricted role.
 The fixture drops its database and role at teardown. No manual database/role
 preprovisioning is required. A second API pool uses that same restricted DSN.
+
+Stripe SDK 15.x changes Event objects from the dictionary interface used by the
+verified adapter and is not supported by this release. Upgrade only after a
+separate compatibility review and full raw-body signature/lifecycle acceptance.
