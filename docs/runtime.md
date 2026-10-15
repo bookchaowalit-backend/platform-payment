@@ -157,9 +157,17 @@ No destructive migration or production activation is authorized here.
 ## Verification
 
 Run the original `bash scripts/check.sh`, then complete `python -m pytest` with
-a disposable NOSUPERUSER NOBYPASSRLS `PLATFORM_TEST_DSN`. The new suite uses real
+a disposable fixture-admin `PLATFORM_TEST_DSN`. The new suite uses real
 PostgreSQL and an injected idempotent fixture provider; SDK request/signature
 coverage uses the real Stripe library with intercepted local HTTP transport.
 No provider requests, charges, secrets or external messages occur. Tests skip DB
 cases when DSN is absent; such a run does not prove durability. See
 [recorded local evidence](verification-2026-10-15.md).
+
+The program-standard `PLATFORM_TEST_DSN` is an explicitly supplied disposable
+**fixture admin** DSN with CREATE DATABASE/ROLE privileges. Each runtime fixture
+uses `platform_backend_core.testing.temporary_database` to create a unique
+database and NOSUPERUSER NOBYPASSRLS role, applies migrations as its admin, grants
+the runtime schema, then connects the application only as that restricted role.
+The fixture drops its database and role at teardown. No manual database/role
+preprovisioning is required. A second API pool uses that same restricted DSN.
