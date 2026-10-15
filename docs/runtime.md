@@ -177,3 +177,25 @@ preprovisioning is required. A second API pool uses that same restricted DSN.
 Stripe SDK 15.x changes Event objects from the dictionary interface used by the
 verified adapter and is not supported by this release. Upgrade only after a
 separate compatibility review and full raw-body signature/lifecycle acceptance.
+
+## Effective runtime grants
+
+Readiness checks schema USAGE and migration-history SELECT, then checks every
+required business-table privilege individually before reporting ready. Missing
+grants return 503 without changing provider, migration or FORCE RLS gates.
+
+- `payment_intents`: SELECT, INSERT, UPDATE.
+- `payment_bindings`: SELECT, INSERT.
+- `payment_webhook_inbox`: SELECT, INSERT.
+- `payment_effects`: INSERT.
+- `billing_checkouts`: SELECT, INSERT, UPDATE.
+- `billing_subscriptions`: SELECT, INSERT, UPDATE.
+- `billing_invoices`: SELECT, INSERT, UPDATE.
+- `payment_refunds`: SELECT, INSERT, UPDATE.
+- `payment_refund_effects`: INSERT.
+- `payment_pending_webhooks`: SELECT, INSERT, UPDATE.
+
+No DELETE/TRUNCATE grant is required by this readiness gate. Append-only effect
+tables require only INSERT; bindings and webhook inbox require SELECT/INSERT.
+Real PostgreSQL LOGIN-role regressions revoke and restore each required grant
+and verify that the minimal runtime grant set remains ready.

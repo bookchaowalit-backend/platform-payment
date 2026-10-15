@@ -10,6 +10,20 @@ from .adapters import PaymentProvider
 from .storage import transaction
 
 
+# Effective privileges used by runtime SQL; append-only effects need INSERT only.
+READINESS_PERMISSIONS = {
+    "payment_intents": ("SELECT", "INSERT", "UPDATE"),
+    "payment_bindings": ("SELECT", "INSERT"),
+    "payment_webhook_inbox": ("SELECT", "INSERT"),
+    "payment_effects": ("INSERT",),
+    "billing_checkouts": ("SELECT", "INSERT", "UPDATE"),
+    "billing_subscriptions": ("SELECT", "INSERT", "UPDATE"),
+    "billing_invoices": ("SELECT", "INSERT", "UPDATE"),
+    "payment_refunds": ("SELECT", "INSERT", "UPDATE"),
+    "payment_refund_effects": ("INSERT",),
+    "payment_pending_webhooks": ("SELECT", "INSERT", "UPDATE"),
+}
+
 class Payment(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     amount: int = Field(ge=1, le=999999999)
@@ -65,6 +79,20 @@ def create_app(
             from .migrations import MIGRATIONS
 
             with transaction(database, UUID(int=0)) as conn:
+                allowed = conn.execute(
+                    "SELECT has_schema_privilege(current_user,'public','USAGE') AS allowed"
+                ).fetchone()["allowed"]
+                if not allowed:
+                    raise ValueError("schema privilege unavailable")
+                permissions = {"platform_schema_migrations": ("SELECT",), **READINESS_PERMISSIONS}
+                for table, privileges in permissions.items():
+                    for privilege in privileges:
+                        allowed = conn.execute(
+                            "SELECT has_table_privilege(current_user,%s,%s) AS allowed",
+                            ("public." + table, privilege),
+                        ).fetchone()["allowed"]
+                        if not allowed:
+                            raise ValueError("runtime privilege unavailable")
                 history = conn.execute(
                     "SELECT version,checksum FROM platform_schema_migrations WHERE namespace=%s",
                     ("platform_payment",),
