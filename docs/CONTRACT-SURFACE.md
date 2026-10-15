@@ -53,7 +53,7 @@ consumer.
 
 No production activation, credentials or customer payloads are included.
 The v1 API owns its PostgreSQL migrations and database writes; it does not
-implement subscriptions, billing, accounting ledger or financial reconciliation. Record parity, privacy and rollback evidence
+implement accounting ledger, tax filing or financial reconciliation. Record parity, privacy and rollback evidence
 in the parent platform registry before any cutover.
 
 ## Implemented-local v1 API
@@ -67,3 +67,12 @@ No legacy hub module is imported at runtime.
 
 See [runtime contract](runtime.md) for request/response bounds, scopes, errors,
 migration instructions, provider configuration and remaining release gates.
+
+## Bounded subscription billing and refunds
+
+- `payment.http.billing`: POST /v1/billing/checkouts; subscriptions list/get/cancel; invoices list/get; source `src/platform_payment/billing_checkouts.py`.
+- `payment.http.refunds`: POST /v1/payment-intents/{id}/refunds; refund read/reconcile; source `src/platform_payment/refunds.py`.
+- `payment.cli.webhook-replay`: python -m platform_payment replay-webhooks --limit 50; source `src/platform_payment/pending_webhooks.py`.
+
+See [billing runtime](billing-runtime.md) for scopes, catalog authority, durable
+pre-binding events, refund reservations, migration002 and staged limitations.

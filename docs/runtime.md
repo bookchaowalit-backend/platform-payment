@@ -2,9 +2,9 @@
 
 Correlation: `SHARED-INFRA-2026-10-15`. This pilot provides payment intent and
 hosted checkout creation, durable idempotency, verified webhook inbox and one
-immutable payment-success effect. It does not implement a financial ledger,
-subscriptions, billing/tax, refunds, disputes, entitlement delivery or financial
-reconciliation. Legacy consumers remain unchanged; no live payment mode or
+immutable payment-success effect. The bounded subscription/invoice/refund extension is documented in
+[billing-runtime.md](billing-runtime.md). It does not implement a financial ledger,
+tax filing, disputes, entitlement delivery or financial reconciliation. Legacy consumers remain unchanged; no live payment mode or
 production cutover is enabled.
 
 ## Install, migrations and configuration
@@ -126,7 +126,8 @@ boundary for future fulfillment, not an accounting ledger.
 
 Success is terminal. Late pending/failed events cannot undo success. Pending
 cannot undo a recorded failure; a later verified success can supersede failure.
-Refund/dispute accounting is not inferred from these states and is out of scope.
+Refund settlement uses the separate reserved-balance extension; dispute/accounting
+interpretation is not inferred from these states.
 
 ## Real Stripe adapter
 
@@ -149,8 +150,8 @@ route. Keep proxy logs free of bodies, bearer headers and signed URLs.
 Before release: independent payment/security review; approved Stripe sandbox
 parity with actual signatures, hosted checkout and asynchronous methods;
 restart/concurrency/backup-restore evidence; legacy consumer parity and rollback.
-Back up the service DB before explicit migration. Roll back image/config while
-preserving intents, bindings, inbox and effects. Do not drop dedupe/history or
+Back up the service DB before explicit migration. Roll back only to a reviewed image compatible with migration002, preserving
+intents, bindings, inbox, pending events, refund reservations and effects. Do not drop dedupe/history or
 reset provider keys. Manual reconciliation is required for old unresolved items.
 No destructive migration or production activation is authorized here.
 

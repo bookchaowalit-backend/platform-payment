@@ -11,10 +11,15 @@ def runtime(monkeypatch):
 
     dsn = os.environ.get("PLATFORM_TEST_DSN")
     if not dsn:
-        pytest.skip("PLATFORM_TEST_DSN required: disposable fixture admin PostgreSQL DSN")
+        pytest.skip(
+            "PLATFORM_TEST_DSN required: disposable fixture admin PostgreSQL DSN"
+        )
     from platform_backend_core.testing import temporary_database
+
     with temporary_database(dsn, prefix="payment_test_") as isolated:
-        MigrationRunner(isolated.admin_dsn, namespace="platform_payment").apply(MIGRATIONS)
+        MigrationRunner(isolated.admin_dsn, namespace="platform_payment").apply(
+            MIGRATIONS
+        )
         isolated.grant_schema()
         monkeypatch.setenv("PLATFORM_TEST_DSN", isolated.runtime_dsn)
         db = Database(isolated.runtime_dsn, max_size=8)

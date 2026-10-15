@@ -1,14 +1,13 @@
 import hashlib
 import json
-from contextlib import contextmanager
 from uuid import UUID, uuid4
 from fastapi.responses import JSONResponse
 from fastapi import Depends, Header, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from psycopg.rows import dict_row
 from starlette.concurrency import run_in_threadpool
 from platform_backend_core import create_app as core_app, require_scope
 from .adapters import PaymentProvider
+from .storage import transaction
 
 
 class Payment(BaseModel):
@@ -23,17 +22,6 @@ class Payment(BaseModel):
         if value not in {"usd", "eur", "gbp", "thb", "jpy", "aud", "cad", "sgd"}:
             raise ValueError("unsupported lowercase currency")
         return value
-
-
-@contextmanager
-def transaction(database, workspace):
-    with database.transaction(workspace) as conn:
-        original = conn.row_factory
-        conn.row_factory = dict_row
-        try:
-            yield conn
-        finally:
-            conn.row_factory = original
 
 
 def public(row):
@@ -52,11 +40,16 @@ def public(row):
     }
 
 
-def create_app(database, verifier, provider: PaymentProvider | None = None):
+def create_app(
+    database, verifier, provider: PaymentProvider | None = None, *, plan_catalog=None
+):
     if provider is None:
         from .config import configured_provider
 
         provider = configured_provider()
+    from .catalog import load_catalog
+
+    catalog = load_catalog(plan_catalog)
     app = core_app("platform-payment", database, verifier)
     app.state.provider = provider
 
@@ -88,10 +81,16 @@ def create_app(database, verifier, provider: PaymentProvider | None = None):
                             "payment_bindings",
                             "payment_webhook_inbox",
                             "payment_effects",
+                            "billing_checkouts",
+                            "billing_subscriptions",
+                            "billing_invoices",
+                            "payment_refunds",
+                            "payment_refund_effects",
+                            "payment_pending_webhooks",
                         ],
                     ),
                 ).fetchall()
-                if len(rows) != 4 or not all(
+                if len(rows) != 10 or not all(
                     r["relrowsecurity"] and r["relforcerowsecurity"] for r in rows
                 ):
                     raise ValueError("RLS unavailable")
@@ -142,8 +141,8 @@ def create_app(database, verifier, provider: PaymentProvider | None = None):
                 return public(current), 202
             # Durable provider object binding is committed with pending state.
             conn.execute(
-                "INSERT INTO payment_bindings(provider,provider_object_id,workspace_id,intent_id) VALUES(%s,%s,%s,%s) ON CONFLICT DO NOTHING",
-                (adapter.name, result["id"], workspace, row["id"]),
+                "INSERT INTO payment_bindings(provider,provider_object_id,workspace_id,intent_id,resource_id) VALUES(%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING",
+                (adapter.name, result["id"], workspace, row["id"], row["id"]),
             )
             binding = conn.execute(
                 "SELECT intent_id FROM payment_bindings WHERE provider=%s AND provider_object_id=%s",
@@ -290,76 +289,33 @@ def create_app(database, verifier, provider: PaymentProvider | None = None):
                 for k in ("id", "provider_object_id")
             ):
                 raise ValueError()
-            if type(event.get("amount")) is not int or event.get("status") not in {
-                "pending",
-                "failed",
-                "succeeded",
-            }:
+            if event.get("kind") not in {
+                "subscription_checkout",
+                "subscription",
+                "invoice",
+                "refund",
+            } and (
+                type(event.get("amount")) is not int
+                or event.get("status")
+                not in {
+                    "pending",
+                    "failed",
+                    "succeeded",
+                }
+            ):
                 raise ValueError()
         except Exception:
             raise HTTPException(400, "invalid provider event or signature") from None
         fingerprint = hashlib.sha256(payload).hexdigest()
-        # A signed provider object ID finds its stored binding. Caller metadata is ignored.
-        with transaction(database, UUID(int=0)) as conn:
-            conn.execute(
-                "SELECT set_config('app.payment_provider',%s,true),set_config('app.payment_object',%s,true)",
-                (adapter.name, event["provider_object_id"]),
-            )
-            binding = conn.execute(
-                "SELECT workspace_id,intent_id FROM payment_bindings WHERE provider=%s AND provider_object_id=%s",
-                (adapter.name, event["provider_object_id"]),
-            ).fetchone()
-        if binding is None:
-            raise HTTPException(
-                409, "provider object not bound; retry after reconciliation"
-            )
-        with transaction(database, binding["workspace_id"]) as conn:
-            row = get(conn, binding["intent_id"], True)
-            if row["amount"] != event["amount"] or row["currency"] != event.get(
-                "currency"
-            ):
-                raise HTTPException(409, "provider amount or currency mismatch")
-            inserted = conn.execute(
-                "INSERT INTO payment_webhook_inbox(provider,event_id,workspace_id,intent_id,fingerprint) VALUES(%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING RETURNING event_id",
-                (
-                    adapter.name,
-                    event["id"],
-                    binding["workspace_id"],
-                    row["id"],
-                    fingerprint,
-                ),
-            ).fetchone()
-            if inserted is None:
-                prior = conn.execute(
-                    "SELECT fingerprint,intent_id FROM payment_webhook_inbox WHERE provider=%s AND event_id=%s",
-                    (adapter.name, event["id"]),
-                ).fetchone()
-                if (
-                    prior is None
-                    or prior["fingerprint"] != fingerprint
-                    or prior["intent_id"] != row["id"]
-                ):
-                    raise HTTPException(409, "provider event identity conflict")
-                return {"accepted": True, "duplicate": True}
-            new_status = event["status"]
-            # Success is terminal; an old pending event cannot undo a failure.
-            if row["status"] != "succeeded" and (
-                new_status == "succeeded" or row["status"] != "failed"
-            ):
-                conn.execute(
-                    "UPDATE payment_intents SET status=%s,updated_at=now() WHERE id=%s",
-                    (new_status, row["id"]),
-                )
-            if new_status == "succeeded":
-                conn.execute(
-                    "INSERT INTO payment_effects(workspace_id,intent_id,kind,amount,currency) VALUES(%s,%s,'payment_succeeded',%s,%s) ON CONFLICT DO NOTHING",
-                    (
-                        binding["workspace_id"],
-                        row["id"],
-                        row["amount"],
-                        row["currency"],
-                    ),
-                )
-            return {"accepted": True, "duplicate": False}
+        from .event_router import apply_verified
 
+        return apply_verified(database, adapter, event, fingerprint)
+
+    from .billing_checkouts import register as register_checkouts
+    from .subscriptions import register as register_subscriptions
+    from .refunds import register as register_refunds
+
+    register_checkouts(app, database, provider, catalog)
+    register_subscriptions(app, database, provider, catalog)
+    register_refunds(app, database, provider)
     return app

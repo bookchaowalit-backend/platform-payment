@@ -86,3 +86,47 @@ database and NOSUPERUSER NOBYPASSRLS role, applies migrations as its admin, gran
 the runtime schema, then connects the application only as that restricted role.
 The fixture drops its database and role at teardown. No manual database/role
 preprovisioning is required. A second API pool uses that same restricted DSN.
+
+## Fixture correction and bounded billing extension
+
+The fixture correction is a separate commit. The original 50-test one-time
+suite passed using the program-standard disposable admin DSN after fixtures
+were changed to create/grant/drop their own isolated databases and restricted
+runtime roles. No manually provisioned database is required.
+
+The final extended `python -m pytest -q` run with that same admin configuration
+passed **66 tests, no skips**, including 16 added billing/refund tests. The
+original `bash scripts/check.sh` separately passed all 36 tests with the extended
+nine-interface contract and unchanged schema pin. Wheel build passed after the
+extension; runtime files remain below 350 lines each. No provider network calls
+or live charges were made. Starlette's existing HTTPX2 warning remains.
+
+Behavioral RED before billing implementation: missing subscription checkout and
+refund routes returned 404 instead of the specified 201/202/409 responses.
+Durable-before-binding RED: the pending event table did not exist; the same test
+then proved a signed unbound subscription event remains invisible to tenant
+queries and operator replay applies it after Checkout association.
+An additional invoice regression first showed a same-second late draft replacing
+an open invoice; the guarded phase transition made the exact test pass.
+A strict refund-event test first accepted JSON boolean true as integer one;
+explicit integer validation changed that response from 200 to 400 without
+releasing/applying the reservation. All full-suite results above are after fixes.
+
+Migration001 checksum is asserted unchanged, and a real upgrade test applies
+001, writes old intent/binding/inbox rows, applies only 002 and validates preserved
+bindings plus zero refund balances. Other new evidence covers tampered catalog
+inputs, saved plan snapshots, concurrent refunds that cannot exceed paid balance,
+duplicate/out-of-order lifecycle/invoice/refund events, concrete scopes,
+provider timeout with stable-key reconciliation and a 20-hour retry cutoff.
+Actual Stripe subscription Checkout/cancel/refund requests and signed event
+normalization are verified using locally intercepted HTTP transport.
+
+Current scope and staged limitations are in [billing-runtime.md](billing-runtime.md).
+The earlier out-of-scope statement for subscriptions/refunds describes the initial
+one-time commit and is superseded by this bounded extension. Accounting ledger,
+tax filing, disputes, entitlement delivery and out-of-band financial reconciliation
+remain outside the implemented slice. Same-second conflicting subscription
+snapshots stay pending for fresh provider evidence/manual review; multi-item,
+shared-customer and plan-change flows fail closed. Live Stripe remains disabled.
+Migration002 requires a compatible rollback image; do not restore a pre-002 image
+or drop dedupe/balance state as a rollback shortcut.

@@ -6,7 +6,8 @@
 
 This repository owns the `payment` capability: payment intent, checkout, billing, ledger, reconciliation.
 This repository now owns a separately packaged FastAPI/PostgreSQL payment API,
-a sandbox-only Stripe adapter and durable webhook inbox. Runtime stage is
+a sandbox-only Stripe adapter, subscription catalog/Checkout, invoice records,
+at-period-end cancellation, refunds and durable webhook inbox. Runtime stage is
 implemented-local. Existing legacy consumers are unchanged; no production
 activation or live payment is authorized by this pilot.
 
@@ -87,3 +88,6 @@ database and NOSUPERUSER NOBYPASSRLS role, applies migrations as its admin, gran
 the runtime schema, then connects the application only as that restricted role.
 The fixture drops its database and role at teardown. No manual database/role
 preprovisioning is required. A second API pool uses that same restricted DSN.
+
+See [subscription billing and refunds](docs/billing-runtime.md) for the bounded
+billing API, catalog configuration, durable event replay and migration002 gates.

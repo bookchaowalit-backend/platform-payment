@@ -1,6 +1,5 @@
 import argparse
 import os
-from pathlib import Path
 from platform_backend_core import Database, MigrationRunner, TokenVerifier
 from . import create_app, MIGRATIONS
 
@@ -9,7 +8,8 @@ def main():
     parser = argparse.ArgumentParser(
         description="Staged platform_payment runtime; no automatic migrations"
     )
-    parser.add_argument("command", choices=["serve", "migrate"])
+    parser.add_argument("command", choices=["serve", "migrate", "replay-webhooks"])
+    parser.add_argument("--limit", type=int, default=50)
     args = parser.parse_args()
     if args.command == "migrate":
         dsn = os.environ.get("DATABASE_MIGRATION_DSN")
@@ -24,6 +24,31 @@ def main():
                 1, "migration failed; inspect database access and migration history\n"
             )
         print(f"applied {len(applied)} migrations")
+        return
+    if args.command == "replay-webhooks":
+        from .config import configured_provider
+        from .pending_webhooks import replay
+        import json
+
+        dsn = os.environ.get("DATABASE_URL")
+        if not dsn:
+            parser.error("DATABASE_URL required")
+        database = None
+        try:
+            provider = configured_provider()
+            if provider is None:
+                raise ValueError("provider required")
+            database = Database(dsn, max_size=2)
+            result = replay(database, provider, limit=args.limit)
+        except Exception:
+            parser.exit(
+                1,
+                "webhook replay failed; check staged configuration and pending records\n",
+            )
+        finally:
+            if database is not None:
+                database.close()
+        print(json.dumps(result))
         return
     dsn = os.environ.get("DATABASE_URL")
     issuer = os.environ.get("JWT_ISSUER")

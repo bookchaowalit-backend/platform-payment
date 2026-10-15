@@ -2,6 +2,7 @@
 
 from typing import Protocol
 from urllib.parse import urlsplit
+from .stripe_billing import StripeBillingMethods
 
 
 class PaymentProvider(Protocol):
@@ -19,7 +20,7 @@ class PaymentProvider(Protocol):
     def verify_event(self, payload: bytes, signature: str | None) -> dict: ...
 
 
-class StripeProvider:
+class StripeProvider(StripeBillingMethods):
     name = "stripe"
 
     def __init__(
@@ -86,6 +87,11 @@ class StripeProvider:
         )
         if event.get("livemode") is not False:
             raise ValueError("sandbox events required")
+        from .stripe_events import normalize
+
+        extended = normalize(event)
+        if extended is not None:
+            return extended
         kind = event["type"]
         obj = event["data"]["object"]
         if kind.startswith("payment_intent."):
@@ -130,3 +136,21 @@ class StripeProvider:
             "amount": amount,
             "currency": obj["currency"],
         }
+
+
+class BillingProvider(PaymentProvider, Protocol):
+    def create_subscription_checkout(
+        self, *, price_id: str, quantity: int, reference: str, idempotency_key: str
+    ) -> dict: ...
+    def cancel_subscription(
+        self, *, subscription_id: str, idempotency_key: str
+    ) -> dict: ...
+    def create_refund(
+        self,
+        *,
+        payment_id: str,
+        amount: int,
+        currency: str,
+        reference: str,
+        idempotency_key: str,
+    ) -> dict: ...

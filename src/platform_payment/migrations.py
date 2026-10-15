@@ -67,3 +67,7 @@ CREATE POLICY payment_effect_workspace ON payment_effects
 """,
     )
 ]
+
+from .billing_migrations import BILLING_MIGRATION
+
+MIGRATIONS.append(BILLING_MIGRATION)
