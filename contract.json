@@ -3,7 +3,7 @@
   "schema_version": "book-platform.contract.v1",
   "platform_id": "payment",
   "repository": "platform-payment",
-  "status": "scaffolded",
+  "status": "pilot",
   "api_version": "v1",
   "data_owner": "platform-payment",
   "capabilities": [
@@ -19,13 +19,12 @@
     "observability"
   ],
   "current_implementation": {
-    "repository": "solo-empire",
-    "source_path": "infra/api/stripe.ts",
+    "repository": "platform-payment",
+    "source_path": "src/platform_payment",
     "source_paths": [
-      "infra/api/stripe.ts",
-      "infra/api/server.ts"
+      "src/platform_payment"
     ],
-    "source_status": "current-implementation-in-solo-empire"
+    "source_status": "implemented-in-this-repository"
   },
   "migration": {
     "compatibility_adapter": "required",
@@ -74,6 +73,23 @@
       "status": "current-in-solo-empire",
       "source": "infra/api/auth.ts",
       "auth": "Bearer token with scope api:write"
+    },
+    {
+      "id": "payment.http.v1-runtime",
+      "kind": "http",
+      "direction": "provides",
+      "name": "POST /v1/payment-intents; POST /v1/checkout; reconcile; GET intents; POST /v1/webhooks/provider",
+      "status": "implemented",
+      "source": "src/platform_payment/app.py",
+      "auth": "Verified workspace JWT payments:read/payments:write; provider webhook raw-body signature"
+    },
+    {
+      "id": "payment.table.workspace-state",
+      "kind": "table",
+      "direction": "provides",
+      "name": "FORCE RLS PostgreSQL durable service-owned state",
+      "status": "implemented",
+      "source": "src/platform_payment/migrations.py"
     }
   ]
 }
