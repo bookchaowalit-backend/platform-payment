@@ -56,7 +56,10 @@ provider endpoints or checkout return URLs. Existing server-owned
 Catalog values are validated at startup and copied into immutable plan objects.
 Each checkout snapshots the selected price/amount/currency/interval/quantity.
 Replaying an existing request uses its saved snapshot even if the deployment's
-catalog later changes. Unknown plans/extra fields are rejected. An absent
+catalog later changes or the plan is retired. Existing keys are resolved and
+fingerprint-checked before current catalog/provider validation, so saved completed
+checkouts remain replayable while new provider work stays disabled when missing
+configuration. Unknown plans/extra fields for new requests are rejected. An absent
 catalog disables new subscription checkouts and cancellation writes with 503;
 existing lifecycle webhooks and read APIs use stored bindings/snapshots.
 Refunds require the provider capability, and do not require a plan catalog.

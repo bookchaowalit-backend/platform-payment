@@ -67,13 +67,7 @@ def register(app, database, provider, catalog):
         response: Response,
         principal=Depends(require_scope("billing:write")),
         key: str = Header(alias="Idempotency-Key", min_length=1, max_length=128),
-        adapter=Depends(enabled),
     ):
-        plan = catalog.get(body.plan)
-        if plan is None:
-            raise HTTPException(422, "unknown configured plan")
-        if body.quantity * plan.unit_amount > 999999999:
-            raise HTTPException(422, "plan total exceeds limit")
         fingerprint = hashlib.sha256(
             json.dumps(
                 body.model_dump(), sort_keys=True, separators=(",", ":")
@@ -82,6 +76,23 @@ def register(app, database, provider, catalog):
         identifier = uuid4()
         fence = uuid4()
         with transaction(database, principal.workspace) as conn:
+            existing = conn.execute(
+                "SELECT * FROM billing_checkouts WHERE workspace_id=%s AND idempotency_key=%s",
+                (principal.workspace, key),
+            ).fetchone()
+            if existing is not None:
+                if existing["fingerprint"] != fingerprint:
+                    raise HTTPException(409, "idempotency key payload conflict")
+                response.status_code = (
+                    202 if existing["status"] in {"creating", "unknown"} else 200
+                )
+                return public(existing)
+            adapter = enabled()
+            plan = catalog.get(body.plan)
+            if plan is None:
+                raise HTTPException(422, "unknown configured plan")
+            if body.quantity * plan.unit_amount > 999999999:
+                raise HTTPException(422, "plan total exceeds limit")
             row = conn.execute(
                 "INSERT INTO billing_checkouts(id,workspace_id,actor_id,idempotency_key,fingerprint,plan,price_id,unit_amount,currency,quantity,interval,provider,provider_key,status,fence,lease_until) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'creating',%s,now()+interval '60 seconds') ON CONFLICT(workspace_id,idempotency_key) DO NOTHING RETURNING *",
                 (

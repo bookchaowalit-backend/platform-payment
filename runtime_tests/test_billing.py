@@ -358,3 +358,75 @@ def test_migration002_upgrades_existing_binding_and_inbox_without_drift(monkeypa
                 ).fetchone() == (0, 0)
         finally:
             db.close()
+
+
+@pytest.mark.parametrize("configuration", ["retired", "disabled"])
+def test_completed_checkout_replay_precedes_current_catalog_and_provider(
+    billing, configuration
+):
+    c, db, ws, provider, dsn = billing
+    original = checkout(c).json()
+    assert activate(c, original).status_code == 200
+    catalog = {"replacement": CATALOG["basic"]} if configuration == "retired" else {}
+    adapter = provider if configuration == "retired" else FakeProvider()
+    with TestClient(
+        create_app(
+            Database(dsn, max_size=2),
+            c.app.state.verifier,
+            provider=adapter,
+            plan_catalog=catalog,
+        )
+    ) as replica:
+        replay = checkout(replica)
+        assert replay.status_code == 200, replay.text
+        assert replay.json()["id"] == original["id"]
+        assert replay.json()["status"] == "complete"
+        assert replay.json()["unit_amount"] == original["unit_amount"]
+        changed = replica.post(
+            "/v1/billing/checkouts",
+            json={"plan": "basic", "quantity": 2},
+            headers={**OWN, "Idempotency-Key": "billing-checkout"},
+        )
+        assert changed.status_code == 409
+        new = checkout(replica, key="new-after-retirement")
+        assert new.status_code == (422 if configuration == "retired" else 503)
+        assert provider.extended_calls["checkout"] == 1
+
+
+@pytest.mark.parametrize(
+    "first_period,second_period", [(1900000000, 1800000000), (1800000000, 1900000000)]
+)
+def test_subscription_same_second_period_conflict_remains_pending_without_mutation(
+    billing, first_period, second_period
+):
+    from datetime import datetime
+    from platform_payment.pending_webhooks import replay
+
+    c, db, ws, provider, _ = billing
+    item = checkout(c).json()
+    assert activate(c, item).status_code == 200
+    assert (
+        subscription_event(
+            c, item, event_id="evt_first_period", current_period_end=first_period
+        ).status_code
+        == 200
+    )
+    sub = c.get("/v1/subscriptions", headers=OWN).json()[0]
+    conflict = subscription_event(
+        c, item, event_id="evt_conflicting_period", current_period_end=second_period
+    )
+    assert conflict.status_code == 409, conflict.text
+    current = c.get(f"/v1/subscriptions/{sub['id']}", headers=OWN).json()
+    assert current["status"] == sub["status"]
+    assert current["cancel_at_period_end"] == sub["cancel_at_period_end"]
+    assert (
+        int(datetime.fromisoformat(current["current_period_end"]).timestamp())
+        == first_period
+    )
+    assert replay(db, provider, limit=10) == {"applied": 0, "pending": 1}
+    assert (
+        c.get(f"/v1/subscriptions/{sub['id']}", headers=OWN).json()[
+            "current_period_end"
+        ]
+        == sub["current_period_end"]
+    )

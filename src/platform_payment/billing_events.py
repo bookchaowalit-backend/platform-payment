@@ -1,6 +1,7 @@
 """Apply signed billing events using only previously stored provider-object bindings."""
 
 from uuid import UUID, uuid4
+from datetime import datetime, timezone
 from fastapi import HTTPException
 from .storage import transaction, fetch, bind, inbox
 
@@ -200,6 +201,8 @@ def subscription(conn, provider, event, fingerprint, binding):
         same = (
             row["status"] == event["status"]
             and row["cancel_at_period_end"] == event["cancel_at_period_end"]
+            and row["current_period_end"]
+            == datetime.fromtimestamp(period, timezone.utc)
         )
         if not same:
             raise HTTPException(

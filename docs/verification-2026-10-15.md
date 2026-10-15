@@ -130,3 +130,25 @@ snapshots stay pending for fresh provider evidence/manual review; multi-item,
 shared-customer and plan-change flows fail closed. Live Stripe remains disabled.
 Migration002 requires a compatible rollback image; do not restore a pre-002 image
 or drop dedupe/balance state as a rollback shortcut.
+
+## Independent review corrections, round 1
+
+Two source-confirmed P2 findings were reproduced with real disposable PostgreSQL
+before changes. Replaying a completed checkout after plan retirement returned
+422 (503 with billing configuration disabled) instead of its saved snapshot.
+Two same-second subscription events with identical status/cancel flag and
+different period ends both returned 200, allowing the period to depend on
+delivery order. Four parametrized regressions were RED before implementation.
+
+The checkout route now resolves existing workspace/key records and compares
+fingerprints before checking current catalog/provider configuration; only new
+creation needs current offerings/configuration. Same-second subscription
+snapshot comparison includes the stored period end as well as status/cancel
+flag, while immutable customer/price/quantity/amount/currency/interval fields
+remain validated against saved data. Conflicting snapshots return 409, stay
+pending through operator replay and leave the saved record unchanged. Both
+period delivery orders and disabled/retired configuration are covered.
+
+The four focused regressions passed after the fixes. Complete suite: 70 passed,
+no skips; original check: 36 passed; wheel build and whitespace checks passed.
+Migration001 and migration002 SQL are unchanged by these corrections.
