@@ -97,7 +97,8 @@
       "direction": "provides",
       "name": "POST /v1/billing/checkouts; subscriptions list/get/cancel; invoices list/get",
       "status": "implemented",
-      "source": "src/platform_payment/billing_checkouts.py"
+      "source": "src/platform_payment/billing_checkouts.py",
+      "auth": "Verified workspace JWT billing:read/billing:write; Idempotency-Key on checkout and cancel"
     },
     {
       "id": "payment.http.refunds",
@@ -105,7 +106,8 @@
       "direction": "provides",
       "name": "POST /v1/payment-intents/{id}/refunds; refund read/reconcile",
       "status": "implemented",
-      "source": "src/platform_payment/refunds.py"
+      "source": "src/platform_payment/refunds.py",
+      "auth": "Verified workspace JWT payments:refund (create/reconcile) and payments:read; Idempotency-Key on create"
     },
     {
       "id": "payment.cli.webhook-replay",
