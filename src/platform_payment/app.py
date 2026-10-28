@@ -1,14 +1,16 @@
 import hashlib
 import json
 from uuid import UUID, uuid4
-from fastapi.responses import JSONResponse
+
 from fastapi import Depends, Header, HTTPException, Query, Request, Response
+from fastapi.responses import JSONResponse
+from platform_backend_core import create_app as core_app
+from platform_backend_core import require_scope
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.concurrency import run_in_threadpool
-from platform_backend_core import create_app as core_app, require_scope
+
 from .adapters import PaymentProvider
 from .storage import transaction
-
 
 # Effective privileges used by runtime SQL; append-only effects need INSERT only.
 READINESS_PERMISSIONS = {
@@ -123,7 +125,7 @@ def create_app(
                 ):
                     raise ValueError("RLS unavailable")
             return {"status": "ready"}
-        except Exception:
+        except Exception:  # noqa: BLE001 - any probe failure is reported as unavailable without detail
             return JSONResponse({"status": "unavailable"}, status_code=503)
 
     def configured():
@@ -156,7 +158,7 @@ def create_app(
                 or not 1 <= len(result["id"]) <= 255
             ):
                 raise ValueError("invalid provider response")
-        except Exception:
+        except Exception:  # noqa: BLE001 - ambiguous provider outcomes become status=unknown
             with transaction(database, workspace) as conn:
                 conn.execute(
                     "UPDATE payment_intents SET status='unknown',updated_at=now(),lease_until=NULL,fence=NULL WHERE id=%s AND fence=%s",
@@ -332,7 +334,7 @@ def create_app(
                 }
             ):
                 raise ValueError()
-        except Exception:
+        except Exception:  # noqa: BLE001 - invalid signatures and payloads are redacted to 400
             raise HTTPException(400, "invalid provider event or signature") from None
         fingerprint = hashlib.sha256(payload).hexdigest()
         from .event_router import apply_verified
@@ -340,8 +342,8 @@ def create_app(
         return apply_verified(database, adapter, event, fingerprint)
 
     from .billing_checkouts import register as register_checkouts
-    from .subscriptions import register as register_subscriptions
     from .refunds import register as register_refunds
+    from .subscriptions import register as register_subscriptions
 
     register_checkouts(app, database, provider, catalog)
     register_subscriptions(app, database, provider, catalog)

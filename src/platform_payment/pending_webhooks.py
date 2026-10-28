@@ -2,8 +2,10 @@
 
 import json
 from uuid import UUID
+
 from fastapi import HTTPException
 from psycopg.types.json import Jsonb
+
 from .storage import transaction
 
 FIELDS = {

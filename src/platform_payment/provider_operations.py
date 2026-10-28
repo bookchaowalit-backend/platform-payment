@@ -1,8 +1,10 @@
 """Durable provider work: commit identity before invocation, retain ambiguity, fence retries."""
 
 from uuid import uuid4
+
 from fastapi import HTTPException
-from .storage import transaction, fetch, bind
+
+from .storage import bind, fetch, transaction
 
 TABLES = {"billing_checkouts": "subscription_checkout", "payment_refunds": "refund"}
 
@@ -40,7 +42,7 @@ def invoke(database, workspace, table, row, provider, fence, call):
         result = call()
         if not isinstance(result.get("id"), str) or not 1 <= len(result["id"]) <= 255:
             raise ValueError("invalid provider object")
-    except Exception:
+    except Exception:  # noqa: BLE001 - ambiguous provider outcomes become status=unknown
         with transaction(database, workspace) as conn:
             conn.execute(
                 "UPDATE "

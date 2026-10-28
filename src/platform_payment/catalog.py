@@ -24,7 +24,7 @@ def load_catalog(supplied=None):
             raise ValueError("catalog too large")
         try:
             supplied = json.loads(raw)
-        except Exception:
+        except Exception:  # noqa: BLE001 - any parse error is re-raised as a redacted ValueError
             raise ValueError("invalid plan catalog") from None
     if not isinstance(supplied, dict) or len(supplied) > 100:
         raise ValueError("invalid plan catalog")

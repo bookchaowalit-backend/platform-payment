@@ -1,6 +1,7 @@
-from .pending_webhooks import stage
-from .billing_events import KINDS, handle as billing
+from .billing_events import KINDS
+from .billing_events import handle as billing
 from .payment_events import handle as payment
+from .pending_webhooks import stage
 
 
 def apply_verified(database, provider, event, fingerprint):

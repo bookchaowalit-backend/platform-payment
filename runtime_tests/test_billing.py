@@ -1,33 +1,30 @@
-import hashlib
-import hmac
-import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
+
 import pytest
 from fastapi.testclient import TestClient
 from platform_backend_core import Database, MigrationRunner, Principal
 from platform_backend_core.testing import temporary_database
-from platform_payment import create_app, MIGRATIONS
+
+from platform_payment import MIGRATIONS, create_app
+
 from .billing_support import (
-    billing,
-    checkout,
+    CATALOG,
+    OTHER,
+    OWN,
+    FakeProvider,
     activate,
-    subscription_event,
+    checkout,
     paid,
     refund,
     signed,
-    CATALOG,
-    OWN,
-    OTHER,
-    BODY,
-    FakeProvider,
-    event,
+    subscription_event,
 )
 
 
 def test_catalog_allowlist_idempotency_and_workspace_isolation(billing):
-    c, db, ws, p, _ = billing
+    c, _db, ws, p, _ = billing
     result = checkout(c)
     assert result.status_code == 201, result.text
     item = result.json()
@@ -61,7 +58,7 @@ def test_catalog_allowlist_idempotency_and_workspace_isolation(billing):
 
 
 def test_subscription_invoice_binding_dedupe_and_out_of_order(billing):
-    c, db, ws, p, _ = billing
+    c, db, _ws, _p, _ = billing
     item = checkout(c).json()
     assert subscription_event(c, item).status_code == 409
     assert activate(c, item).status_code == 200
@@ -161,7 +158,7 @@ def test_subscription_invoice_binding_dedupe_and_out_of_order(billing):
 
 
 def test_checkout_timeout_reconcile_and_unknown_event_retries(billing):
-    c, db, ws, p, _ = billing
+    c, _db, _ws, p, _ = billing
     p.fail_next = "checkout"
     first = checkout(c)
     assert first.status_code == 202, first.text
@@ -178,7 +175,7 @@ def test_checkout_timeout_reconcile_and_unknown_event_retries(billing):
 
 
 def test_cancel_is_at_period_end_idempotent_and_reconciles(billing):
-    c, db, ws, p, _ = billing
+    c, _db, _ws, p, _ = billing
     item = checkout(c).json()
     assert activate(c, item).status_code == 200
     assert subscription_event(c, item).status_code == 200
@@ -210,7 +207,7 @@ def test_cancel_is_at_period_end_idempotent_and_reconciles(billing):
 
 
 def test_missing_catalog_and_legacy_provider_fail_closed(billing, monkeypatch):
-    c, db, ws, p, dsn = billing
+    c, _db, ws, _p, dsn = billing
     monkeypatch.delenv("PAYMENT_PLAN_CATALOG_JSON")
     second = Database(dsn, max_size=2)
     with TestClient(
@@ -230,7 +227,7 @@ def test_missing_catalog_and_legacy_provider_fail_closed(billing, monkeypatch):
 
 
 def test_two_pools_share_billing_idempotency_and_catalog_is_snapshotted(billing):
-    c, db, ws, p, dsn = billing
+    c, _db, _ws, p, dsn = billing
     with TestClient(
         create_app(
             Database(dsn, max_size=4),
@@ -273,7 +270,7 @@ def test_events_before_binding_are_durably_retained_then_operator_replayed(billi
 
 
 def test_invoice_same_second_older_phase_cannot_replace_open(billing):
-    c, db, ws, p, _ = billing
+    c, _db, _ws, _p, _ = billing
     item = checkout(c).json()
     assert activate(c, item).status_code == 200
     base = {
@@ -364,7 +361,7 @@ def test_migration002_upgrades_existing_binding_and_inbox_without_drift(monkeypa
 def test_completed_checkout_replay_precedes_current_catalog_and_provider(
     billing, configuration
 ):
-    c, db, ws, provider, dsn = billing
+    c, _db, _ws, provider, dsn = billing
     original = checkout(c).json()
     assert activate(c, original).status_code == 200
     catalog = {"replacement": CATALOG["basic"]} if configuration == "retired" else {}
@@ -400,9 +397,10 @@ def test_subscription_same_second_period_conflict_remains_pending_without_mutati
     billing, first_period, second_period
 ):
     from datetime import datetime
+
     from platform_payment.pending_webhooks import replay
 
-    c, db, ws, provider, _ = billing
+    c, db, _ws, provider, _ = billing
     item = checkout(c).json()
     assert activate(c, item).status_code == 200
     assert (

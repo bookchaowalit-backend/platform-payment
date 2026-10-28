@@ -1,28 +1,19 @@
-import hashlib
-import hmac
-import json
-import os
 from concurrent.futures import ThreadPoolExecutor
-from uuid import uuid4
-import pytest
+
 from fastapi.testclient import TestClient
-from platform_backend_core import Database, MigrationRunner
-from platform_backend_core.testing import temporary_database
-from platform_payment import create_app, MIGRATIONS
+from platform_backend_core import Database
+
+from platform_payment import create_app
+
 from .billing_support import (
-    billing,
+    CATALOG,
+    OTHER,
+    OWN,
     checkout,
-    activate,
-    subscription_event,
+    event,
     paid,
     refund,
     signed,
-    CATALOG,
-    OWN,
-    OTHER,
-    BODY,
-    FakeProvider,
-    event,
 )
 
 
@@ -100,7 +91,7 @@ def test_refund_reservation_prevents_concurrent_overrefund_and_settles_once(bill
 
 
 def test_failed_refund_releases_reservation_and_changed_key_conflicts(billing):
-    c, db, ws, p, _ = billing
+    c, _db, _ws, _p, _ = billing
     item = paid(c)
     first = refund(c, item).json()
     assert refund(c, item).json()["id"] == first["id"]
@@ -135,7 +126,7 @@ def test_failed_refund_releases_reservation_and_changed_key_conflicts(billing):
 
 
 def test_refund_timeout_is_reconciled_with_persisted_provider_key(billing):
-    c, db, ws, p, _ = billing
+    c, _db, _ws, p, _ = billing
     item = paid(c)
     p.fail_next = "refund"
     first = refund(c, item)
@@ -170,7 +161,7 @@ def test_refund_timeout_is_reconciled_with_persisted_provider_key(billing):
 
 def test_catalog_snapshot_replay_and_exhausted_refund_window(billing):
     c, db, ws, p, dsn = billing
-    original = checkout(c).json()
+    checkout(c)
     changed = {
         "basic": {
             **CATALOG["basic"],
@@ -203,7 +194,7 @@ def test_catalog_snapshot_replay_and_exhausted_refund_window(billing):
 
 
 def test_refund_signed_amount_is_strict_integer_and_currency_bound(billing):
-    c, db, ws, p, _ = billing
+    c, db, ws, _p, _ = billing
     item = c.post(
         "/v1/payment-intents", json={"amount": 1, "currency": "usd"}, headers=OWN
     ).json()

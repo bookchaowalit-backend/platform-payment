@@ -1,7 +1,9 @@
 from uuid import UUID, uuid4
+
 from fastapi import Depends, Header, HTTPException, Query, Response
 from platform_backend_core import require_scope
-from .storage import transaction, fetch
+
+from .storage import fetch, transaction
 
 
 def subscription(row):
@@ -103,7 +105,7 @@ def register(app, database, provider, catalog):
                 raise ValueError("invalid provider response")
             state = "pending"
             status = 200
-        except Exception:
+        except Exception:  # noqa: BLE001 - ambiguous provider outcomes become status=unknown
             state = "unknown"
             status = 202
         with transaction(database, workspace) as conn:

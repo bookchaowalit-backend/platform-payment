@@ -1,34 +1,16 @@
 import hashlib
 import hmac
 import json
-import os
-from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
-import pytest
-from fastapi.testclient import TestClient
-from platform_backend_core import Database, MigrationRunner
-from platform_backend_core.testing import temporary_database
-from platform_payment import create_app, MIGRATIONS
-from .billing_support import (
-    billing,
-    checkout,
-    activate,
-    subscription_event,
-    paid,
-    refund,
-    signed,
-    CATALOG,
-    OWN,
-    OTHER,
-    BODY,
-    FakeProvider,
-    event,
-)
+
+from runtime_tests.stripe_keys import fixture_key
 
 
 def test_actual_stripe_billing_and_refund_sdk_requests_are_bound(monkeypatch):
-    import httpx
     from urllib.parse import parse_qs
+
+    import httpx
+
     from platform_payment.adapters import StripeProvider
 
     calls = []
@@ -62,7 +44,7 @@ def test_actual_stripe_billing_and_refund_sdk_requests_are_bound(monkeypatch):
 
     monkeypatch.setattr(httpx.Client, "request", request)
     adapter = StripeProvider(
-        api_key="rk_test_synthetic_fixture",
+        api_key=fixture_key(),
         webhook_secret="synthetic-webhook",
         success_url="https://example.invalid/success",
         cancel_url="https://example.invalid/cancel",
@@ -112,10 +94,11 @@ def test_actual_stripe_billing_and_refund_sdk_requests_are_bound(monkeypatch):
 
 def test_stripe_signed_subscription_invoice_refund_normalization():
     import time
+
     from platform_payment.adapters import StripeProvider
 
     adapter = StripeProvider(
-        api_key="rk_test_synthetic_fixture",
+        api_key=fixture_key(),
         webhook_secret="synthetic-webhook",
         success_url="https://example.invalid/success",
         cancel_url="https://example.invalid/cancel",

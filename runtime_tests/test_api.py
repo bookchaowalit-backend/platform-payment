@@ -1,13 +1,17 @@
 import os
 from uuid import UUID, uuid4
+
 import pytest
 from fastapi.testclient import TestClient
+
+from runtime_tests.stripe_keys import fixture_key
 
 
 @pytest.fixture
 def runtime(monkeypatch):
     from platform_backend_core import Database, MigrationRunner, Principal
-    from platform_payment import create_app, MIGRATIONS
+
+    from platform_payment import MIGRATIONS, create_app
 
     dsn = os.environ.get("PLATFORM_TEST_DSN")
     if not dsn:
@@ -116,7 +120,7 @@ BODY = {"amount": 1500, "currency": "usd"}
 
 
 def test_payment_idempotency_and_tenant_isolation(runtime):
-    c, db, ws, provider = runtime
+    c, _db, _ws, provider = runtime
     first = c.post("/v1/payment-intents", json=BODY, headers=OWN)
     assert first.status_code == 201, first.text
     item = first.json()
@@ -138,7 +142,7 @@ def test_payment_idempotency_and_tenant_isolation(runtime):
 
 
 def test_signature_binding_dedupe_and_out_of_order(runtime):
-    c, db, ws, provider = runtime
+    c, db, ws, _provider = runtime
     item = c.post("/v1/payment-intents", json=BODY, headers=OWN).json()
     provider_id = item["provider_object_id"]
     assert (
@@ -190,7 +194,7 @@ def test_signature_binding_dedupe_and_out_of_order(runtime):
 def test_concurrent_requests_and_webhooks(runtime):
     from concurrent.futures import ThreadPoolExecutor
 
-    c, db, ws, provider = runtime
+    c, _db, _ws, provider = runtime
     with ThreadPoolExecutor(max_workers=6) as pool:
         values = list(
             pool.map(
@@ -213,7 +217,7 @@ def test_concurrent_requests_and_webhooks(runtime):
 
 
 def test_timeout_retains_identity_and_reconciles_provider_idempotently(runtime):
-    c, db, ws, provider = runtime
+    c, _db, _ws, provider = runtime
     provider.timeout = True
     first = c.post("/v1/payment-intents", json=BODY, headers=OWN)
     assert first.status_code == 202
@@ -229,7 +233,7 @@ def test_timeout_retains_identity_and_reconciles_provider_idempotently(runtime):
 
 
 def test_checkout_limits_rls_and_config(runtime):
-    c, db, ws, provider = runtime
+    c, db, ws, _provider = runtime
     result = c.post("/v1/checkout", json=BODY, headers=OWN)
     assert result.status_code == 201, result.text
     assert result.json()["checkout_url"] == "http://127.0.0.1/checkout"
@@ -263,8 +267,9 @@ def test_checkout_limits_rls_and_config(runtime):
 
 
 def test_missing_provider_fails_closed():
-    from platform_payment import create_app
     from platform_backend_core import Principal
+
+    from platform_payment import create_app
 
     class V:
         def verify(self, auth):
@@ -295,7 +300,7 @@ def test_stripe_sdk_is_bounded_and_supports_sync_service_calls():
     from platform_payment.adapters import StripeProvider
 
     adapter = StripeProvider(
-        api_key="rk_test_synthetic_fixture",
+        api_key=fixture_key(),
         webhook_secret="synthetic-webhook",
         success_url="https://example.invalid/success",
         cancel_url="https://example.invalid/cancel",
@@ -303,7 +308,7 @@ def test_stripe_sdk_is_bounded_and_supports_sync_service_calls():
     http_client = adapter.client._requestor._get_http_client()
     assert http_client._timeout == 5
     assert http_client._client is not None
-    for key in ("rk_live_synthetic_fixture", "sk_live_synthetic_fixture", ""):
+    for key in (fixture_key("rk", "live"), fixture_key("sk", "live"), ""):
         with pytest.raises(ValueError):
             StripeProvider(
                 api_key=key,
@@ -314,8 +319,10 @@ def test_stripe_sdk_is_bounded_and_supports_sync_service_calls():
 
 
 def test_actual_stripe_sdk_checkout_and_intent_payloads_without_network(monkeypatch):
-    import httpx
     from urllib.parse import parse_qs
+
+    import httpx
+
     from platform_payment.adapters import StripeProvider
 
     calls = []
@@ -333,7 +340,7 @@ def test_actual_stripe_sdk_checkout_and_intent_payloads_without_network(monkeypa
 
     monkeypatch.setattr(httpx.Client, "request", request)
     adapter = StripeProvider(
-        api_key="rk_test_synthetic_fixture",
+        api_key=fixture_key(),
         webhook_secret="synthetic-webhook",
         success_url="https://example.invalid/success",
         cancel_url="https://example.invalid/cancel",
@@ -377,10 +384,12 @@ def test_actual_stripe_sdk_checkout_and_intent_payloads_without_network(monkeypa
 
 
 def test_stripe_signature_raw_body_livemode_and_checkout_payment_status():
+    import stripe
+
     from platform_payment.adapters import StripeProvider
 
     adapter = StripeProvider(
-        api_key="rk_test_synthetic_fixture",
+        api_key=fixture_key(),
         webhook_secret="synthetic-webhook",
         success_url="https://example.invalid/success",
         cancel_url="https://example.invalid/cancel",
@@ -414,10 +423,10 @@ def test_stripe_signature_raw_body_livemode_and_checkout_payment_status():
     body["data"]["object"]["payment_status"] = "paid"
     payload, signature = signed(body)
     assert adapter.verify_event(payload, signature)["status"] == "succeeded"
-    with pytest.raises(Exception):
+    with pytest.raises(stripe.SignatureVerificationError):
         adapter.verify_event(payload + b" ", signature)
     payload, signature = signed(body, timestamp=int(time.time()) - 600)
-    with pytest.raises(Exception):
+    with pytest.raises(stripe.SignatureVerificationError):
         adapter.verify_event(payload, signature)
     body["livemode"] = True
     payload, signature = signed(body)
@@ -446,11 +455,10 @@ def test_failed_then_success_and_immutable_effects_and_stale_reconcile(runtime):
         event(c, provider_id, event_id="evt_success", status="succeeded").status_code
         == 200
     )
-    with pytest.raises(psycopg.Error):
-        with db.transaction(ws) as conn:
-            conn.execute(
-                "DELETE FROM payment_effects WHERE intent_id=%s", (item["id"],)
-            )
+    with pytest.raises(psycopg.Error), db.transaction(ws) as conn:
+        conn.execute(
+            "DELETE FROM payment_effects WHERE intent_id=%s", (item["id"],)
+        )
     provider.timeout = True
     unknown = c.post(
         "/v1/payment-intents",
@@ -473,10 +481,12 @@ def test_failed_then_success_and_immutable_effects_and_stale_reconcile(runtime):
 
 def test_two_independent_api_pools_share_creation_binding_and_inbox(runtime):
     from concurrent.futures import ThreadPoolExecutor
+
     from platform_backend_core import Database
+
     from platform_payment import create_app
 
-    c, db, ws, provider = runtime
+    c, _db, _ws, provider = runtime
     second = Database(os.environ["PLATFORM_TEST_DSN"], max_size=4)
     with TestClient(
         create_app(second, c.app.state.verifier, provider=provider)
@@ -520,7 +530,7 @@ def test_two_independent_api_pools_share_creation_binding_and_inbox(runtime):
 def test_concurrent_reconcilers_use_same_provider_identity(runtime):
     from concurrent.futures import ThreadPoolExecutor
 
-    c, db, ws, provider = runtime
+    c, _db, _ws, provider = runtime
     provider.timeout = True
     item = c.post("/v1/payment-intents", json=BODY, headers=OWN).json()
     assert item["status"] == "unknown"
@@ -545,7 +555,7 @@ def test_concurrent_reconcilers_use_same_provider_identity(runtime):
 def test_slow_webhook_work_does_not_block_health_endpoint(runtime):
     from concurrent.futures import ThreadPoolExecutor
 
-    c, db, ws, provider = runtime
+    c, _db, _ws, provider = runtime
     item = c.post("/v1/payment-intents", json=BODY, headers=OWN).json()
     original = provider.verify_event
     started = threading.Event()

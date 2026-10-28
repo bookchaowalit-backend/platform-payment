@@ -1,10 +1,12 @@
 import hashlib
 from uuid import UUID, uuid4
+
 from fastapi import Depends, Header, HTTPException, Query, Response
-from pydantic import BaseModel, ConfigDict, Field
 from platform_backend_core import require_scope
-from .storage import transaction, fetch, inbox
-from .provider_operations import invoke, claim
+from pydantic import BaseModel, ConfigDict, Field
+
+from .provider_operations import claim, invoke
+from .storage import fetch, inbox, transaction
 
 
 class Refund(BaseModel):

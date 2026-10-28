@@ -1,7 +1,9 @@
 import argparse
 import os
+
 from platform_backend_core import Database, MigrationRunner, TokenVerifier
-from . import create_app, MIGRATIONS
+
+from . import MIGRATIONS, create_app
 
 
 def main():
@@ -19,16 +21,17 @@ def main():
             applied = MigrationRunner(dsn, namespace="platform_payment").apply(
                 MIGRATIONS
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 - migration errors are reported without the DSN
             parser.exit(
                 1, "migration failed; inspect database access and migration history\n"
             )
         print(f"applied {len(applied)} migrations")
         return
     if args.command == "replay-webhooks":
+        import json
+
         from .config import configured_provider
         from .pending_webhooks import replay
-        import json
 
         dsn = os.environ.get("DATABASE_URL")
         if not dsn:
@@ -40,7 +43,7 @@ def main():
                 raise ValueError("provider required")
             database = Database(dsn, max_size=2)
             result = replay(database, provider, limit=args.limit)
-        except Exception:
+        except Exception:  # noqa: BLE001 - replay errors are reported without configuration or event values
             parser.exit(
                 1,
                 "webhook replay failed; check staged configuration and pending records\n",
@@ -65,7 +68,7 @@ def main():
         )
         database = Database(dsn, max_size=int(os.environ.get("DATABASE_POOL_MAX", "8")))
         app = create_app(database, verifier)
-    except Exception:
+    except Exception:  # noqa: BLE001 - startup errors are reported without configuration values
         parser.exit(1, "invalid service configuration\n")
     import uvicorn
 

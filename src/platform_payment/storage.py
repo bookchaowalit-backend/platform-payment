@@ -1,6 +1,7 @@
 """Tenant transactions restore connection attributes before returning pooled connections."""
 
 from contextlib import contextmanager
+
 from fastapi import HTTPException
 from psycopg.rows import dict_row
 

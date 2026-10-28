@@ -2,6 +2,7 @@
 
 from typing import Protocol
 from urllib.parse import urlsplit
+
 from .stripe_billing import StripeBillingMethods
 
 
