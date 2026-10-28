@@ -23,24 +23,30 @@ it, and every gate in `fixtures/gates/` passes in CI.
 
 ## Positioning
 
-A boundary contract with offline evidence, not a running service. Only the contract (`contract.json`) and its offline checks; no payment provider code.
+A boundary contract with offline evidence plus a **test-mode-only** v1 runtime pilot
+(`src/platform_payment`): payment intents, hosted checkout, subscriptions, bounded refunds
+and a balanced settlement ledger against a Stripe sandbox. Not deployed; live Stripe keys
+refuse startup and readiness.
 
 ## Operating Context
 
-- Status: `scaffolded`; DOCPACK verdict: `template`. The runtime is not activated; the current
-  implementation is `infra/api/stripe.ts` in the parent registry.
+- Status: `pilot` (contract); DOCPACK verdict: `template`. The runtime is not activated or
+  deployed; the legacy implementation is `infra/api/stripe.ts` in the parent registry and
+  live Stripe webhooks stay with `bookchaowalit/platform-webhooks-worker`. Live activation
+  and any webhook-ownership move need a separate owner decision (D8); see
+  `docs/runtime.md`.
 - CI: shared `ci-python` (Ruff and `scripts/check.sh` on Python 3.11 and 3.12) and the shared
   security workflow, on GitHub-hosted runners (public repository).
 - Sentry does not apply: nothing runs in production. Add it in the change that activates a
   runtime.
-- The open `codex/shared-infrastructure-20261015` pull request (decision D8) is outside this
-  document.
+- Runtime CI: `shared-runtime.yml` runs the runtime suite against PostgreSQL 16.
 
 ## Capabilities and Constraints
 
 - `scripts/check.py`: validates `contract.json` against the vendored schema;
   `scripts/check_schema_pin.py`: the vendored schema matches the pinned canonical hash.
-- No production provider integration, database writer, credential or customer payload.
+- No live provider integration, production database, credential or customer payload; the
+  runtime's Stripe adapter accepts only test-mode keys.
 - Out of scope: running the capability; it stays in its current implementation until parity
   and rollback evidence permit a cutover.
 

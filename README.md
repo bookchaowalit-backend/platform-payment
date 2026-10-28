@@ -5,9 +5,11 @@
 ## Scope
 
 This repository owns the `payment` capability: payment intent, checkout, billing, ledger, reconciliation.
-The current source implementation is recorded as `infra/api/stripe.ts` in the
-parent registry. This checkout is a local scaffold; it contains no production
-provider integration, database writer, credential, or customer payload.
+This repository now owns a separately packaged FastAPI/PostgreSQL payment API,
+a sandbox-only Stripe adapter, subscription catalog/Checkout, invoice records,
+at-period-end cancellation, refunds and durable webhook inbox. Runtime stage is
+implemented-local. Existing legacy consumers are unchanged; no production
+activation or live payment is authorized by this pilot.
 
 ## Boundary
 
@@ -15,7 +17,7 @@ provider integration, database writer, credential, or customer payload.
 - Repository: `platform-payment`
 - Target remote: `https://github.com/bookchaowalit-backend/platform-payment.git` (published; runtime not activated)
 - Contract: `book-platform.contract.v1`
-- Status: `scaffolded`
+- Status: `pilot`
 - Data owner: the platform boundary identified in `contract.json`
 
 The platform communicates through versioned API or event contracts. Consumers
@@ -25,7 +27,7 @@ parity and rollback evidence permit a cutover.
 
 ## Local verification
 
-Run from this repository (Python 3.11+, no third-party packages):
+Run the original contract checks from this repository:
 
 ```bash
 bash scripts/check.sh
@@ -46,7 +48,7 @@ there first, then copy the schema and its pin here). Pass
 checkout. `python3 scripts/check_registry_alignment.py --solo-empire ../solo-empire`
 compares this contract with the parent platform registry (local only; read-only).
 
-The check validates repository shape and contract metadata only. It does not
+The original check validates repository shape and contract metadata. It does not
 claim deployment, provider connectivity, data migration, or production
 readiness.
 
@@ -63,3 +65,29 @@ Before activating a remote or changing a consumer, add sanitized fixtures for
 success, duplicate delivery, timeout and provider failure; prove tenant/privacy
 isolation; compare the old and new contract; and rehearse rollback on a
 disposable state store. Record the evidence in the parent platform registry.
+
+## Shared API runtime
+
+Stage: **implemented-local**, correlation `SHARED-INFRA-2026-10-15`.
+The HTTP API and explicit migrations use the separately installed
+`platform-backend-core` distribution. The hub is not a runtime dependency.
+See [API, configuration and release runbook](docs/runtime.md) and
+[local verification evidence](docs/verification-2026-10-15.md).
+
+Install a reviewed core wheel/revision first, then `pip install -e '.[test]'`.
+Run `python -m platform_payment migrate` explicitly with `DATABASE_MIGRATION_DSN`,
+then `python -m platform_payment serve` with `DATABASE_URL` and JWT configuration.
+Run `python -m pytest` with a disposable fixture-admin `PLATFORM_TEST_DSN`
+to exercise the complete original and new suite. Database tests explicitly skip
+when that DSN is absent. These skips do not establish durability or isolation.
+
+The program-standard `PLATFORM_TEST_DSN` is an explicitly supplied disposable
+**fixture admin** DSN with CREATE DATABASE/ROLE privileges. Each runtime fixture
+uses `platform_backend_core.testing.temporary_database` to create a unique
+database and NOSUPERUSER NOBYPASSRLS role, applies migrations as its admin, grants
+the runtime schema, then connects the application only as that restricted role.
+The fixture drops its database and role at teardown. No manual database/role
+preprovisioning is required. A second API pool uses that same restricted DSN.
+
+See [subscription billing and refunds](docs/billing-runtime.md) for the bounded
+billing API, catalog configuration, durable event replay and migration002 gates.

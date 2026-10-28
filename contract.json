@@ -3,7 +3,7 @@
   "schema_version": "book-platform.contract.v1",
   "platform_id": "payment",
   "repository": "platform-payment",
-  "status": "scaffolded",
+  "status": "pilot",
   "api_version": "v1",
   "data_owner": "platform-payment",
   "capabilities": [
@@ -19,13 +19,12 @@
     "observability"
   ],
   "current_implementation": {
-    "repository": "solo-empire",
-    "source_path": "infra/api/stripe.ts",
+    "repository": "platform-payment",
+    "source_path": "src/platform_payment",
     "source_paths": [
-      "infra/api/stripe.ts",
-      "infra/api/server.ts"
+      "src/platform_payment"
     ],
-    "source_status": "current-implementation-in-solo-empire"
+    "source_status": "implemented-in-this-repository"
   },
   "migration": {
     "compatibility_adapter": "required",
@@ -74,6 +73,57 @@
       "status": "current-in-solo-empire",
       "source": "infra/api/auth.ts",
       "auth": "Bearer token with scope api:write"
+    },
+    {
+      "id": "payment.http.v1-runtime",
+      "kind": "http",
+      "direction": "provides",
+      "name": "POST /v1/payment-intents; POST /v1/checkout; reconcile; GET intents; POST /v1/webhooks/provider",
+      "status": "implemented",
+      "source": "src/platform_payment/app.py",
+      "auth": "Verified workspace JWT payments:read/payments:write; provider webhook raw-body signature"
+    },
+    {
+      "id": "payment.table.workspace-state",
+      "kind": "table",
+      "direction": "provides",
+      "name": "FORCE RLS PostgreSQL durable service-owned state",
+      "status": "implemented",
+      "source": "src/platform_payment/migrations.py"
+    },
+    {
+      "id": "payment.table.ledger",
+      "kind": "table",
+      "direction": "provides",
+      "name": "payment_ledger_entries: append-only balanced double-entry journals in integer minor units (FORCE RLS)",
+      "status": "implemented",
+      "source": "src/platform_payment/ledger_migrations.py"
+    },
+    {
+      "id": "payment.http.billing",
+      "kind": "http",
+      "direction": "provides",
+      "name": "POST /v1/billing/checkouts; subscriptions list/get/cancel; invoices list/get",
+      "status": "implemented",
+      "source": "src/platform_payment/billing_checkouts.py",
+      "auth": "Verified workspace JWT billing:read/billing:write; Idempotency-Key on checkout and cancel"
+    },
+    {
+      "id": "payment.http.refunds",
+      "kind": "http",
+      "direction": "provides",
+      "name": "POST /v1/payment-intents/{id}/refunds; refund read/reconcile",
+      "status": "implemented",
+      "source": "src/platform_payment/refunds.py",
+      "auth": "Verified workspace JWT payments:refund (create/reconcile) and payments:read; Idempotency-Key on create"
+    },
+    {
+      "id": "payment.cli.webhook-replay",
+      "kind": "cli",
+      "direction": "provides",
+      "name": "python -m platform_payment replay-webhooks --limit 50",
+      "status": "implemented",
+      "source": "src/platform_payment/pending_webhooks.py"
     }
   ]
 }

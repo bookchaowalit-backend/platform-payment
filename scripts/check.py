@@ -19,7 +19,7 @@ from typing import Any
 # --- Repository-specific settings -------------------------------------------
 # Everything below this block is shared verbatim across Book Platform
 # repositories; keep local differences inside this block.
-ALLOWED_STATUS = frozenset({"scaffolded"})
+ALLOWED_STATUS = frozenset({"scaffolded", "pilot"})
 IMPLEMENTATION_REPOSITORIES = frozenset({"solo-empire"})
 EXTRA_REQUIRED_FILES: tuple[str, ...] = ()
 EXTRA_README_HEADINGS: tuple[str, ...] = ()
