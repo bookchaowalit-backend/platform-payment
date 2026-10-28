@@ -341,7 +341,7 @@ def test_migration002_upgrades_existing_binding_and_inbox_without_drift(monkeypa
                 )
             assert MigrationRunner(
                 isolated.admin_dsn, namespace="platform_payment"
-            ).apply(MIGRATIONS) == ["002-billing-refunds"]
+            ).apply(MIGRATIONS) == ["002-billing-refunds", "003-ledger"]
             isolated.grant_schema()
             with db.transaction(ws) as conn:
                 assert conn.execute(

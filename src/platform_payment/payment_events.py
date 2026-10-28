@@ -3,6 +3,7 @@
 from fastapi import HTTPException
 
 from .billing_events import lookup
+from .ledger import post
 from .pending_webhooks import applied
 from .storage import fetch, inbox, transaction
 
@@ -38,9 +39,19 @@ def handle(database, provider, event, fingerprint):
                     (status, row["id"]),
                 )
             if status == "succeeded":
-                conn.execute(
-                    "INSERT INTO payment_effects(workspace_id,intent_id,kind,amount,currency) VALUES(%s,%s,'payment_succeeded',%s,%s) ON CONFLICT DO NOTHING",
+                effect = conn.execute(
+                    "INSERT INTO payment_effects(workspace_id,intent_id,kind,amount,currency) VALUES(%s,%s,'payment_succeeded',%s,%s) ON CONFLICT DO NOTHING RETURNING intent_id",
                     (row["workspace_id"], row["id"], row["amount"], row["currency"]),
-                )
+                ).fetchone()
+                if effect is not None:
+                    post(
+                        conn,
+                        workspace=row["workspace_id"],
+                        source_kind="payment_succeeded",
+                        source_id=row["id"],
+                        intent_id=row["id"],
+                        amount=row["amount"],
+                        currency=row["currency"],
+                    )
         applied(conn, provider.name, event["id"])
         return {"accepted": True, "duplicate": not inserted}

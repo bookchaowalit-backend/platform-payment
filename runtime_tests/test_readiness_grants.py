@@ -13,7 +13,7 @@ from psycopg.conninfo import make_conninfo
 
 from platform_payment import MIGRATIONS, create_app
 
-REQUIRED={'payment_intents': ('SELECT', 'INSERT', 'UPDATE'), 'payment_bindings': ('SELECT', 'INSERT'), 'payment_webhook_inbox': ('SELECT', 'INSERT'), 'payment_effects': ('INSERT',), 'billing_checkouts': ('SELECT', 'INSERT', 'UPDATE'), 'billing_subscriptions': ('SELECT', 'INSERT', 'UPDATE'), 'billing_invoices': ('SELECT', 'INSERT', 'UPDATE'), 'payment_refunds': ('SELECT', 'INSERT', 'UPDATE'), 'payment_refund_effects': ('INSERT',), 'payment_pending_webhooks': ('SELECT', 'INSERT', 'UPDATE')}
+REQUIRED={'payment_intents': ('SELECT', 'INSERT', 'UPDATE'), 'payment_bindings': ('SELECT', 'INSERT'), 'payment_webhook_inbox': ('SELECT', 'INSERT'), 'payment_effects': ('INSERT',), 'billing_checkouts': ('SELECT', 'INSERT', 'UPDATE'), 'billing_subscriptions': ('SELECT', 'INSERT', 'UPDATE'), 'billing_invoices': ('SELECT', 'INSERT', 'UPDATE'), 'payment_refunds': ('SELECT', 'INSERT', 'UPDATE'), 'payment_refund_effects': ('INSERT',), 'payment_pending_webhooks': ('SELECT', 'INSERT', 'UPDATE'), 'payment_ledger_entries': ('SELECT', 'INSERT')}
 GRANTS=[('TABLE',table,privilege) for table,privileges in REQUIRED.items() for privilege in privileges]
 GRANTS += [('SCHEMA','public','USAGE'),('TABLE','platform_schema_migrations','SELECT')]
 

@@ -25,6 +25,8 @@ READINESS_PERMISSIONS = {
     "payment_refunds": ("SELECT", "INSERT", "UPDATE"),
     "payment_refund_effects": ("INSERT",),
     "payment_pending_webhooks": ("SELECT", "INSERT", "UPDATE"),
+    # The balance trigger reads the journal back as the runtime role.
+    "payment_ledger_entries": ("SELECT", "INSERT"),
 }
 
 class Payment(BaseModel):
@@ -108,22 +110,9 @@ def create_app(
                     raise ValueError("migration mismatch")
                 rows = conn.execute(
                     "SELECT relname,relrowsecurity,relforcerowsecurity FROM pg_class WHERE oid=ANY(%s::regclass[])",
-                    (
-                        [
-                            "payment_intents",
-                            "payment_bindings",
-                            "payment_webhook_inbox",
-                            "payment_effects",
-                            "billing_checkouts",
-                            "billing_subscriptions",
-                            "billing_invoices",
-                            "payment_refunds",
-                            "payment_refund_effects",
-                            "payment_pending_webhooks",
-                        ],
-                    ),
+                    (list(READINESS_PERMISSIONS),),
                 ).fetchall()
-                if len(rows) != 10 or not all(
+                if len(rows) != len(READINESS_PERMISSIONS) or not all(
                     r["relrowsecurity"] and r["relforcerowsecurity"] for r in rows
                 ):
                     raise ValueError("RLS unavailable")

@@ -5,6 +5,7 @@ from fastapi import Depends, Header, HTTPException, Query, Response
 from platform_backend_core import require_scope
 from pydantic import BaseModel, ConfigDict, Field
 
+from .ledger import post
 from .provider_operations import claim, invoke
 from .storage import fetch, inbox, transaction
 
@@ -196,6 +197,15 @@ def process(conn, provider, event, fingerprint, binding):
                 row["amount"],
                 row["currency"],
             ),
+        )
+        post(
+            conn,
+            workspace=row["workspace_id"],
+            source_kind="refund_succeeded",
+            source_id=row["id"],
+            intent_id=row["intent_id"],
+            amount=row["amount"],
+            currency=row["currency"],
         )
     else:
         conn.execute(
