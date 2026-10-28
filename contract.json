@@ -92,6 +92,14 @@
       "source": "src/platform_payment/migrations.py"
     },
     {
+      "id": "payment.table.ledger",
+      "kind": "table",
+      "direction": "provides",
+      "name": "payment_ledger_entries: append-only balanced double-entry journals in integer minor units (FORCE RLS)",
+      "status": "implemented",
+      "source": "src/platform_payment/ledger_migrations.py"
+    },
+    {
       "id": "payment.http.billing",
       "kind": "http",
       "direction": "provides",
