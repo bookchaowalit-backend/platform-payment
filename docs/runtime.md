@@ -174,8 +174,8 @@ Never fulfill on the return URL. No automatic tax is enabled.
 
 ## Deployment and rollback gates
 
-Build `Dockerfile` with immutable `CORE_REQUIREMENT`; there is no default core
-artifact. Run non-root, one process per container, concurrency 64, pool max 8
+Build the image with `docker build .` (see "Container image" below; the core
+commit is fixed in the `Dockerfile`, there is no build argument). Run non-root, one process per container, concurrency 64, pool max 8
 and request timeout 30s. Bound all replicas to the database connection budget.
 Inject credentials via the deployment secret store. Egress allows approved
 Stripe/JWKS endpoints; ingress protects metrics and has a separate signed webhook
@@ -189,6 +189,36 @@ Back up the service DB before explicit migration. Roll back only to a reviewed i
 intents, bindings, inbox, pending events, refund reservations, effects and ledger journals. Do not drop dedupe/history or
 reset provider keys. Manual reconciliation is required for old unresolved items.
 No destructive migration or production activation is authorized here.
+
+### Container image
+
+`docker build .` works from a clean checkout; no pre-staged `wheelhouse/` is
+needed. The `Dockerfile` is two stages:
+
+1. `build` (`python:3.12-slim` plus `git`): `pip wheel` builds this service's wheel
+   and `platform-backend-core` from the same reviewed commit CI installs
+   (`d00e0119c2e47da3942d9c7b4b88828953f8bc5a`), with all transitive dependencies.
+2. `runtime` (`python:3.12-slim`, no git, no build tools): installs only those
+   wheels with `--no-index`, runs as UID/GID `65532`, `PORT=8080`, and keeps
+   `CMD ["python", "-m", "platform_payment", "serve"]`. `migrate` (with
+   `DATABASE_MIGRATION_DSN`) and `replay-webhooks` run from the same image with a
+   command override; every command still refuses live Stripe mode.
+
+`.dockerignore` keeps `.git`, `.venv`, build output and `.env*` out of the build
+context. CI job `image` in `shared-runtime.yml` runs `docker build` on every push
+and pull request, then checks that the image imports the service and runs as a
+non-root user. It also
+runs `python -m platform_payment --help` (the `serve`, `migrate` and
+`replay-webhooks` commands) and starts `serve` with a probe variable built inside
+the container from `LIVE_KEY_PREFIXES`, which must exit 2 with the live-mode
+refusal naming the variable but not its value; no Stripe-shaped literal is
+written into the workflow. It never pushes or deploys. `tests/test_build_hygiene.py`
+(part of `scripts/check.sh`) fails if the Dockerfile copies a git-ignored path,
+stops being multi-stage, pins a core commit other than the workflow's, runs the
+final stage as root or changes the CMD, if CI stops building the image, or if any
+workflow `uses:` is not pinned to a 40-hex commit SHA (tags go in a trailing
+comment). Upgrading the core means changing the commit in the workflow, the
+Dockerfile and `[tool.uv.sources]` together; the tests fail on any mismatch.
 
 ## Verification
 
@@ -359,7 +389,7 @@ created or changed.
    eleven tables, and that the 003 backfill ran as the non-superuser owner.
 4. Inject sandbox-only secrets (`rk_test_` restricted key, sandbox webhook
    signing secret, HTTPS return URLs) from the secret store; start one replica
-   with the reviewed `CORE_REQUIREMENT` image; `/readyz` must be 200.
+   from the `docker build .` image (see "Container image"); `/readyz` must be 200.
 5. Negative check: set a live-shaped key on the staging service and confirm the
    process refuses to start (exit 2) and `/readyz` is 503; remove it.
 6. Sandbox provider parity: real signed events for intents, hosted checkout,
@@ -391,3 +421,20 @@ new tests failed first (3 of 3) and pass now.
   return 409, which covers the short window before a new binding commits.
 
 Full suite: 132 passed against PostgreSQL 16.2, Python 3.12.
+
+## Build hygiene — 2026-10-29 (branch `build-hygiene`)
+
+Ported from `platform-developer` `8047108`: the `Dockerfile` is now the
+multi-stage clean-checkout build under "Container image", every workflow action
+is pinned to a commit SHA (`11d5960a...` = `actions/checkout` v4,
+`a26af69b...` = `actions/setup-python` v5, tag in a trailing comment), and the
+new CI job `image` builds the image without pushing it. Error handling is
+unchanged.
+
+RED (test written first, run against the old files): `python3 -m unittest
+tests.test_build_hygiene`: 5 of 8 failed (unpinned `actions/checkout@v4` / `actions/setup-python@v5` in `shared-runtime.yml`; one `FROM`; no core commit in the Dockerfile, which took a `CORE_REQUIREMENT` build argument; no `docker build` step; no image check of the CLI and live-mode refusal). The checker self-test, the clean-checkout check (the old file copied only tracked paths) and the non-root `USER` (then UID 10001) passed.
+
+GREEN: `bash scripts/check.sh` 50 unit tests OK; `ruff check .` clean.
+The database tests run in the CI `runtime` job against PostgreSQL 16; the image
+build is verified only by the CI `image` job (no local Docker). Nothing was
+pushed to a registry or deployed.
