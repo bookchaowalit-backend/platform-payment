@@ -18,7 +18,8 @@ READINESS_PERMISSIONS = {
     "payment_intents": ("SELECT", "INSERT", "UPDATE"),
     "payment_bindings": ("SELECT", "INSERT"),
     "payment_webhook_inbox": ("SELECT", "INSERT"),
-    "payment_effects": ("INSERT",),
+    # INSERT ... RETURNING reads the returned column back, so it needs SELECT too.
+    "payment_effects": ("SELECT", "INSERT"),
     "billing_checkouts": ("SELECT", "INSERT", "UPDATE"),
     "billing_subscriptions": ("SELECT", "INSERT", "UPDATE"),
     "billing_invoices": ("SELECT", "INSERT", "UPDATE"),

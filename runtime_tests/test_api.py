@@ -60,6 +60,7 @@ import time
 
 class FakeProvider:
     name = "fixture"
+    livemode = False
 
     def __init__(self):
         self.objects = {}

@@ -13,13 +13,14 @@ from psycopg.conninfo import make_conninfo
 
 from platform_payment import MIGRATIONS, create_app
 
-REQUIRED={'payment_intents': ('SELECT', 'INSERT', 'UPDATE'), 'payment_bindings': ('SELECT', 'INSERT'), 'payment_webhook_inbox': ('SELECT', 'INSERT'), 'payment_effects': ('INSERT',), 'billing_checkouts': ('SELECT', 'INSERT', 'UPDATE'), 'billing_subscriptions': ('SELECT', 'INSERT', 'UPDATE'), 'billing_invoices': ('SELECT', 'INSERT', 'UPDATE'), 'payment_refunds': ('SELECT', 'INSERT', 'UPDATE'), 'payment_refund_effects': ('INSERT',), 'payment_pending_webhooks': ('SELECT', 'INSERT', 'UPDATE'), 'payment_ledger_entries': ('SELECT', 'INSERT')}
+REQUIRED={'payment_intents': ('SELECT', 'INSERT', 'UPDATE'), 'payment_bindings': ('SELECT', 'INSERT'), 'payment_webhook_inbox': ('SELECT', 'INSERT'), 'payment_effects': ('SELECT', 'INSERT'), 'billing_checkouts': ('SELECT', 'INSERT', 'UPDATE'), 'billing_subscriptions': ('SELECT', 'INSERT', 'UPDATE'), 'billing_invoices': ('SELECT', 'INSERT', 'UPDATE'), 'payment_refunds': ('SELECT', 'INSERT', 'UPDATE'), 'payment_refund_effects': ('INSERT',), 'payment_pending_webhooks': ('SELECT', 'INSERT', 'UPDATE'), 'payment_ledger_entries': ('SELECT', 'INSERT')}
 GRANTS=[('TABLE',table,privilege) for table,privileges in REQUIRED.items() for privilege in privileges]
 GRANTS += [('SCHEMA','public','USAGE'),('TABLE','platform_schema_migrations','SELECT')]
 
 
 class LocalAdapter:
     name='fixture'
+    livemode=False
     def presign_put(self,*args):return {'url':'http://127.0.0.1/fixture','headers':{}}
     def head(self,key):return None
     def presign_get(self,*args):return 'http://127.0.0.1/fixture'
@@ -78,3 +79,16 @@ def test_least_required_grants_do_not_need_destructive_permissions(runtime):
                     assert conn.execute('SELECT has_table_privilege(%s,%s,%s)',(temp.runtime_role,table,privilege)).fetchone()==(False,)
     assert client.get('/readyz').status_code==200
     assert database.ready() is True
+
+
+def test_least_privilege_role_can_record_a_payment_effect(runtime):
+    # INSERT ... RETURNING needs SELECT on the returned column; readiness must demand it.
+    from uuid import uuid4
+    _,database,temp=runtime
+    workspace,intent=uuid4(),uuid4()
+    with psycopg.connect(temp.admin_dsn) as admin:
+        admin.execute("INSERT INTO payment_intents(id,workspace_id,actor_id,operation,idempotency_key,fingerprint,amount,currency,provider,provider_key,status) "
+                      "VALUES(%s,%s,%s,'intent','k','f',100,'thb','stripe',%s,'pending')",(intent,workspace,uuid4(),'pk-'+str(intent)))
+    with database.transaction(workspace) as conn:
+        row=conn.execute("INSERT INTO payment_effects(workspace_id,intent_id,kind,amount,currency) VALUES(%s,%s,'payment_succeeded',100,'thb') ON CONFLICT DO NOTHING RETURNING intent_id",(workspace,intent)).fetchone()
+    assert row[0]==intent

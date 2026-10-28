@@ -221,7 +221,7 @@ grants return 503 without changing provider, migration or FORCE RLS gates.
 - `payment_intents`: SELECT, INSERT, UPDATE.
 - `payment_bindings`: SELECT, INSERT.
 - `payment_webhook_inbox`: SELECT, INSERT.
-- `payment_effects`: INSERT.
+- `payment_effects`: SELECT, INSERT (`INSERT ... RETURNING` reads the returned column).
 - `billing_checkouts`: SELECT, INSERT, UPDATE.
 - `billing_subscriptions`: SELECT, INSERT, UPDATE.
 - `billing_invoices`: SELECT, INSERT, UPDATE.
@@ -373,3 +373,21 @@ created or changed.
    re-apply 003 and compare journals.
 9. Record the evidence in the parent registry; any cutover or live activation
    is a separate owner decision.
+
+## Review fixes — 2026-10-29
+
+Independent review (changes requested) found one medium and two low issues; the
+new tests failed first (3 of 3) and pass now.
+
+- The documented least-privilege role could pass `/readyz` yet fail every payment
+  settlement: `INSERT ... RETURNING` on `payment_effects` needs SELECT. Readiness,
+  the grant list above and the readiness test now require SELECT and INSERT, and a
+  test records an effect as that exact role (it failed with permission denied first).
+- An injected provider must declare `livemode = False`; one that does not say is
+  refused at startup and in readiness (fail closed).
+- A `payment_intent.*` event whose object is still unbound after 3 deliveries (for
+  example the intent under a Checkout session) is acknowledged as ignored instead of
+  failing with 409 until Stripe disables the endpoint. The first two deliveries still
+  return 409, which covers the short window before a new binding commits.
+
+Full suite: 132 passed against PostgreSQL 16.2, Python 3.12.

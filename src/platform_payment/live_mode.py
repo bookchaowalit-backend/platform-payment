@@ -34,7 +34,8 @@ def refuse_live_mode(environ: Mapping[str, str] | None = None, provider=None) ->
             "live Stripe mode refused: this runtime is test-mode only; "
             "remove the live key from " + ", ".join(names)
         )
-    if provider is not None and getattr(provider, "livemode", False) is not False:
+    # Fail closed: an injected provider must declare livemode=False explicitly.
+    if provider is not None and getattr(provider, "livemode", None) is not False:
         raise LiveModeRefused(
             "live Stripe mode refused: the configured provider reports live mode"
         )
