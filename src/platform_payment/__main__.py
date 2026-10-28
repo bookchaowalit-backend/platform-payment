@@ -4,6 +4,7 @@ import os
 from platform_backend_core import Database, MigrationRunner, TokenVerifier
 
 from . import MIGRATIONS, create_app
+from .live_mode import LiveModeRefused, refuse_live_mode
 
 
 def main():
@@ -13,6 +14,10 @@ def main():
     parser.add_argument("command", choices=["serve", "migrate", "replay-webhooks"])
     parser.add_argument("--limit", type=int, default=50)
     args = parser.parse_args()
+    try:
+        refuse_live_mode()
+    except LiveModeRefused as refused:
+        parser.exit(2, str(refused) + "\n")
     if args.command == "migrate":
         dsn = os.environ.get("DATABASE_MIGRATION_DSN")
         if not dsn:

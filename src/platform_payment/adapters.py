@@ -27,7 +27,7 @@ class StripeProvider(StripeBillingMethods):
     def __init__(
         self, *, api_key: str, webhook_secret: str, success_url: str, cancel_url: str
     ):
-        # Live mode deliberately has no switch in this staged integration.
+        # Test mode only: there is no live switch (owner decision D8).
         if not api_key.startswith(("rk_test_", "sk_test_")) or not webhook_secret:
             raise ValueError(
                 "explicit sandbox Stripe and webhook configuration required"
@@ -42,6 +42,7 @@ class StripeProvider(StripeBillingMethods):
             max_network_retries=1,
             http_client=stripe.HTTPXClient(timeout=5, allow_sync_methods=True),
         )
+        self.livemode = False
         self.webhook_secret = webhook_secret
         self.success_url = success_url
         self.cancel_url = cancel_url

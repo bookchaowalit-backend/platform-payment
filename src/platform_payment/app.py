@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.concurrency import run_in_threadpool
 
 from .adapters import PaymentProvider
+from .live_mode import refuse_live_mode
 from .storage import transaction
 
 # Effective privileges used by runtime SQL; append-only effects need INSERT only.
@@ -59,6 +60,7 @@ def public(row):
 def create_app(
     database, verifier, provider: PaymentProvider | None = None, *, plan_catalog=None
 ):
+    refuse_live_mode(provider=provider)
     if provider is None:
         from .config import configured_provider
 
@@ -78,6 +80,7 @@ def create_app(
         try:
             if provider is None:
                 raise ValueError("provider unavailable")
+            refuse_live_mode(provider=provider)
             from .migrations import MIGRATIONS
 
             with transaction(database, UUID(int=0)) as conn:
