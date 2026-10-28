@@ -26,10 +26,10 @@ jobs:
     env:
       PLATFORM_TEST_DSN: dbname=postgres user=postgres host=127.0.0.1 port=5432
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
       - name: Install reviewed shared core and service tests
@@ -40,3 +40,31 @@ jobs:
         run: python -m pytest -q
       - name: Build service wheel
         run: python -m pip wheel --no-deps --wheel-dir dist .
+  image:
+    # Proves the Dockerfile builds from a clean checkout. Nothing is pushed or deployed.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Build container image (no push)
+        run: docker build --pull --tag platform-payment:ci .
+      - name: Image imports the service and runs as non-root
+        run: |
+          docker run --rm platform-payment:ci python -c "import platform_backend_core, platform_payment.app"
+          test "$(docker run --rm platform-payment:ci id -u)" != 0
+      - name: Image keeps the CLI commands and refuses live Stripe mode
+        run: |
+          docker run --rm platform-payment:ci python -m platform_payment --help | grep -q "serve,migrate,replay-webhooks"
+          # The probe key is built from the module's own prefix inside the container;
+          # no Stripe-shaped literal is written here.
+          docker run --rm platform-payment:ci python -c "
+          import os, subprocess, sys
+          from platform_payment.live_mode import LIVE_KEY_PREFIXES
+          env = dict(os.environ, PAYMENT_LIVE_PROBE=LIVE_KEY_PREFIXES[0] + 'probe')
+          run = subprocess.run([sys.executable, '-m', 'platform_payment', 'serve'], env=env, capture_output=True, text=True)
+          assert run.returncode == 2, run.returncode
+          assert 'live Stripe mode refused' in run.stderr and 'PAYMENT_LIVE_PROBE' in run.stderr
+          assert 'probe' not in run.stderr.replace('PAYMENT_LIVE_PROBE', '')
+          "
