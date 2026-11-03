@@ -35,11 +35,14 @@ refuse startup and readiness.
   live Stripe webhooks stay with `bookchaowalit/platform-webhooks-worker`. Live activation
   and any webhook-ownership move need a separate owner decision (D8); see
   `docs/runtime.md`.
-- CI: shared `ci-python` (Ruff and `scripts/check.sh` on Python 3.11 and 3.12) and the shared
-  security workflow, on GitHub-hosted runners (public repository).
-- Sentry does not apply: nothing runs in production. Add it in the change that activates a
+- CI: shared `ci-python` (Ruff and `scripts/check.sh` on Python 3.11 and 3.12), a second
+  `ci-python` job on the locked environment (`uv.lock`: Ruff, mypy, the whole pytest suite
+  against PostgreSQL 16 under a coverage gate, the wheel build) and the shared security
+  workflow, on GitHub-hosted runners (public repository). `shared-runtime.yml` builds the image.
+- Sentry: wired as in the other platform services (`src/platform_payment/_sentry.py`: errors
+  only, no free text, no request data) and a no-op until `SENTRY_DSN` is set. Nothing runs in
+  production yet; create the Sentry project and set the DSN in the change that activates the
   runtime.
-- Runtime CI: `shared-runtime.yml` runs the runtime suite against PostgreSQL 16.
 
 ## Capabilities and Constraints
 

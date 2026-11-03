@@ -1,4 +1,5 @@
 import os
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -307,8 +308,9 @@ def test_stripe_sdk_is_bounded_and_supports_sync_service_calls():
         cancel_url="https://example.invalid/cancel",
     )
     http_client = adapter.client._requestor._get_http_client()
-    assert http_client._timeout == 5
-    assert http_client._client is not None
+    # Private attributes of the stripe SDK's httpx client: the bound is what this test is about.
+    assert http_client._timeout == 5  # type: ignore[attr-defined]
+    assert http_client._client is not None  # type: ignore[attr-defined]
     for key in (fixture_key("rk", "live"), fixture_key("sk", "live"), ""):
         with pytest.raises(ValueError):
             StripeProvider(
@@ -404,7 +406,7 @@ def test_stripe_signature_raw_body_livemode_and_checkout_payment_status():
         ).hexdigest()
         return payload, f"t={stamp},v1={signature}"
 
-    body = {
+    body: dict[str, Any] = {
         "id": "evt_synthetic",
         "object": "event",
         "livemode": False,

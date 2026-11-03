@@ -8,7 +8,9 @@ from platform_backend_core import create_app as core_app
 from platform_backend_core import require_scope
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.concurrency import run_in_threadpool
+from starlette.middleware import Middleware
 
+from ._sentry import CaptureErrors
 from .adapters import PaymentProvider
 from .live_mode import refuse_live_mode
 from .storage import transaction
@@ -72,6 +74,8 @@ def create_app(
 
     catalog = load_catalog(plan_catalog)
     app = core_app("platform-payment", database, verifier)
+    # Last in the list = innermost: inside the core boundary that turns errors into a 500.
+    app.user_middleware.append(Middleware(CaptureErrors))
     app.state.provider = provider
 
     app.router.routes[:] = [

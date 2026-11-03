@@ -14,7 +14,7 @@ def test_injected_provider_must_declare_test_mode(monkeypatch):
     for name in ("PAYMENT_STRIPE_API_KEY", "STRIPE_SECRET_KEY", "STRIPE_API_KEY"):
         monkeypatch.delenv(name, raising=False)
     with pytest.raises(ValueError, match="live Stripe mode refused"):
-        create_app(object(), object(), provider=Undeclared())
+        create_app(object(), object(), provider=Undeclared())  # type: ignore[arg-type]  # incomplete on purpose
 
 
 def test_unbound_payment_event_is_retried_then_ignored(runtime):  # noqa: F811

@@ -17,6 +17,7 @@ def test_actual_stripe_billing_and_refund_sdk_requests_are_bound(monkeypatch):
 
     def request(client, method, url, **kwargs):
         calls.append((method, str(url), kwargs))
+        value: dict[str, object]
         if "/checkout/sessions/cs_paid" in str(url):
             value = {
                 "id": "cs_paid",

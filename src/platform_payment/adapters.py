@@ -1,6 +1,6 @@
 """Provider-neutral boundary; provider creation is always idempotent."""
 
-from typing import Protocol
+from typing import Any, Protocol
 from urllib.parse import urlsplit
 
 from .stripe_billing import StripeBillingMethods
@@ -48,10 +48,11 @@ class StripeProvider(StripeBillingMethods):
         self.cancel_url = cancel_url
 
     def create(self, *, amount, currency, reference, idempotency_key, checkout):
-        options = {"idempotency_key": idempotency_key}
+        options: Any = {"idempotency_key": idempotency_key}
         if checkout:
-            obj = self.client.v1.checkout.sessions.create(
-                params={
+            session = self.client.v1.checkout.sessions.create(
+                # integration_identifier is a Stripe parameter missing from the SDK's typed params.
+                params={  # type: ignore[arg-type]
                     "mode": "payment",
                     "line_items": [
                         {
@@ -70,7 +71,7 @@ class StripeProvider(StripeBillingMethods):
                 },
                 options=options,
             )
-            return {"id": obj.id, "status": "pending", "checkout_url": obj.url}
+            return {"id": session.id, "status": "pending", "checkout_url": session.url}
         obj = self.client.v1.payment_intents.create(
             params={
                 "amount": amount,

@@ -10,3 +10,6 @@ build/
 
 *.egg-info/
 .venv/
+.coverage
+.mypy_cache/
+.ruff_cache/

@@ -1,12 +1,23 @@
 """Sandbox Stripe billing/refund methods; all destinations/prices are server-owned."""
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import stripe
+
 
 class StripeBillingMethods:
+    # Set by StripeProvider.__init__, the class that mixes these methods in.
+    client: "stripe.StripeClient"
+    success_url: str
+    cancel_url: str
+
     def create_subscription_checkout(
         self, *, price_id, quantity, reference, idempotency_key
     ):
         obj = self.client.v1.checkout.sessions.create(
-            params={
+            # integration_identifier is a Stripe parameter missing from the SDK's typed params.
+            params={  # type: ignore[arg-type]
                 "mode": "subscription",
                 "line_items": [{"price": price_id, "quantity": quantity}],
                 "client_reference_id": reference,
