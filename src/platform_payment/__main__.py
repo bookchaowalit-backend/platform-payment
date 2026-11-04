@@ -11,7 +11,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Staged platform_payment runtime; no automatic migrations"
     )
-    parser.add_argument("command", choices=["serve", "migrate", "replay-webhooks"])
+    parser.add_argument("command", choices=["serve", "migrate", "replay-webhooks", "relay-outbox"])
     parser.add_argument("--limit", type=int, default=50)
     args = parser.parse_args()
     try:
@@ -57,6 +57,26 @@ def main():
             if database is not None:
                 database.close()
         print(json.dumps(result))
+        return
+    if args.command == "relay-outbox":
+        import json
+
+        from .outbox import KafkaPublisher, kafka_config_from_env, relay_once
+
+        dsn = os.environ.get("DATABASE_URL")
+        if not dsn:
+            parser.error("DATABASE_URL required")
+        database = None
+        try:
+            publisher = KafkaPublisher(kafka_config_from_env(os.environ))
+            database = Database(dsn, max_size=2)
+            result = relay_once(database, publisher, batch_size=args.limit)
+        except Exception:  # noqa: BLE001 - relay errors are reported without configuration or event values
+            parser.exit(1, "outbox relay failed; check PAYMENT_KAFKA_* and database access\n")
+        finally:
+            if database is not None:
+                database.close()
+        print(json.dumps({"sent": result.sent, "failed": result.failed, "skipped": result.skipped}))
         return
     dsn = os.environ.get("DATABASE_URL")
     issuer = os.environ.get("JWT_ISSUER")

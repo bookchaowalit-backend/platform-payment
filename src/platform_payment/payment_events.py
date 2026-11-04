@@ -6,6 +6,7 @@ from fastapi import HTTPException
 
 from .billing_events import lookup
 from .ledger import post
+from .outbox import payment_succeeded
 from .pending_webhooks import applied, context
 from .storage import fetch, inbox, transaction
 
@@ -74,6 +75,14 @@ def handle(database, provider, event, fingerprint):
                         intent_id=row["id"],
                         amount=row["amount"],
                         currency=row["currency"],
+                    )
+                    payment_succeeded(
+                        conn,
+                        workspace_id=row["workspace_id"],
+                        intent_id=row["id"],
+                        amount=row["amount"],
+                        currency=row["currency"],
+                        provider=provider.name,
                     )
         applied(conn, provider.name, event["id"])
         return {"accepted": True, "duplicate": not inserted}

@@ -260,11 +260,37 @@ grants return 503 without changing provider, migration or FORCE RLS gates.
 - `payment_pending_webhooks`: SELECT, INSERT, UPDATE.
 - `payment_ledger_entries`: SELECT, INSERT (the balance trigger reads the
   journal back as the runtime role).
+- `payment_outbox`: SELECT, INSERT, UPDATE (settlement inserts; `relay-outbox`
+  reads and marks rows sent).
 
 No DELETE/TRUNCATE grant is required by this readiness gate. Append-only effect
 tables require only INSERT; bindings and webhook inbox require SELECT/INSERT.
 Real PostgreSQL LOGIN-role regressions revoke and restore each required grant
 and verify that the minimal runtime grant set remains ready.
+
+## Outbox (ADR-0008)
+
+Migration `004-outbox` adds `payment_outbox`. The first settlement of an intent
+writes one `payment.intent.succeeded` envelope (`id` = `payment.intent.succeeded:<intent>`,
+`data` = workspace id, intent id, amount, currency, provider; no personal data) in
+the same transaction as the effect and the journal, so a rolled-back settlement
+writes no event and a redelivered webhook writes no second one.
+
+`python -m platform_payment relay-outbox [--limit N]` publishes unsent rows to
+Kafka topic `commerce.events.v1` (key = intent id) and marks them sent after the
+broker acknowledges. It needs `DATABASE_URL` and `PAYMENT_KAFKA_BOOTSTRAP`,
+`PAYMENT_KAFKA_USERNAME`, `PAYMENT_KAFKA_PASSWORD`, `PAYMENT_KAFKA_CA_PEM`
+(Infisical `/aiven`, user `payment-producer`, write ACL on that topic only).
+
+- RLS: tenants see only their workspace's rows. The relay sets the
+  transaction-local `app.outbox_relay` and may then read and mark every row, but
+  never insert one.
+- One relay at a time (`pg_try_advisory_xact_lock`); a second run returns `skipped`.
+- Order per intent: rows go out in `seq` order; after a failed publish the later
+  rows of that key wait, and the failed row backs off 1, 2, 4 … 64 minutes, so
+  rows that keep failing never fill a batch.
+- The client is `confluent-kafka`: kafka-python-ng cannot authenticate to Kafka
+  4.x brokers (it only speaks the removed SaslHandshake v0 flow).
 
 ## Ledger
 
@@ -385,8 +411,8 @@ created or changed.
    migrator role (NOSUPERUSER) and a NOSUPERUSER NOBYPASSRLS runtime role
    holding exactly the grants above.
 3. Back up, then `python -m platform_payment migrate` with
-   `DATABASE_MIGRATION_DSN`; confirm migrations 001-003 and FORCE RLS on all
-   eleven tables, and that the 003 backfill ran as the non-superuser owner.
+   `DATABASE_MIGRATION_DSN`; confirm migrations 001-004 and FORCE RLS on all
+   twelve tables, and that the 003 backfill ran as the non-superuser owner.
 4. Inject sandbox-only secrets (`rk_test_` restricted key, sandbox webhook
    signing secret, HTTPS return URLs) from the secret store; start one replica
    from the `docker build .` image (see "Container image"); `/readyz` must be 200.

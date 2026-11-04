@@ -30,6 +30,8 @@ READINESS_PERMISSIONS = {
     "payment_pending_webhooks": ("SELECT", "INSERT", "UPDATE"),
     # The balance trigger reads the journal back as the runtime role.
     "payment_ledger_entries": ("SELECT", "INSERT"),
+    # ADR-0008 outbox: settlement inserts; relay-outbox reads and marks rows sent.
+    "payment_outbox": ("SELECT", "INSERT", "UPDATE"),
 }
 
 class Payment(BaseModel):

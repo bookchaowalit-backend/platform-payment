@@ -70,6 +70,8 @@ CREATE POLICY payment_effect_workspace ON payment_effects
 
 from .billing_migrations import BILLING_MIGRATION
 from .ledger_migrations import LEDGER_MIGRATION
+from .outbox_migrations import OUTBOX_MIGRATION
 
 MIGRATIONS.append(BILLING_MIGRATION)
 MIGRATIONS.append(LEDGER_MIGRATION)
+MIGRATIONS.append(OUTBOX_MIGRATION)
