@@ -69,9 +69,13 @@ def test_a_live_stripe_key_refuses_before_any_relay_work():
     calls = []
     env = {**ENV, "PAYMENT_STRIPE_API_KEY": "sk_live_" + "MARKER"}
     posts = []
+    def relay(environ):
+        calls.append(environ)
+        return RelayResult(0, 0)
+
     code = relay_job.run(
         env,
-        relay=lambda e: calls.append(e) or RelayResult(0, 0),
+        relay=relay,
         post=lambda url, token, body: posts.append(body),
     )
     assert code == 2
