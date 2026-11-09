@@ -289,7 +289,7 @@ broker acknowledges. It needs `DATABASE_URL` and `PAYMENT_KAFKA_BOOTSTRAP`,
 - Hosted (2026-11-09): Railway service `payment-relay` in project platform-payment, cron
   `50 * * * *` UTC (before the lake sink at :05), restart NEVER, same image as payment-api with
   start command `python -m platform_payment.relay_job`: one relay pass, then a counts-only
-  heartbeat `payment-relay` (uptime Worker, 3 h; `failed` = `relay` crash or `publish` failures).
+  heartbeat `payment-relay` (uptime Worker, 3 h; `failed` = `relay` crash, `publish` failures, or `live_mode` when a live Stripe key is present: refused before any work, exit 2).
   Variables: `DATABASE_URL` (reference to payment-api), `PAYMENT_KAFKA_*`, `HEARTBEAT_TOKEN`.
 - Order per intent: rows go out in `seq` order; after a failed publish the later
   rows of that key wait, and the failed row backs off 1, 2, 4 … 64 minutes, so

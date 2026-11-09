@@ -63,3 +63,18 @@ def test_missing_database_url_fails_closed():
     env = {k: v for k, v in ENV.items() if k != "DATABASE_URL"}
     with pytest.raises(SystemExit):
         relay_job.run(env, relay=lambda e: RelayResult(0, 0), post=lambda *a: None)
+
+
+def test_a_live_stripe_key_refuses_before_any_relay_work():
+    calls = []
+    env = {**ENV, "PAYMENT_STRIPE_API_KEY": "sk_live_" + "MARKER"}
+    posts = []
+    code = relay_job.run(
+        env,
+        relay=lambda e: calls.append(e) or RelayResult(0, 0),
+        post=lambda url, token, body: posts.append(body),
+    )
+    assert code == 2
+    assert calls == []
+    assert posts == [{"ok": False, "failed": ["live_mode"], "sent": 0}]
+    assert "MARKER" not in json.dumps(posts)
