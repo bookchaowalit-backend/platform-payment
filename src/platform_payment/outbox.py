@@ -69,6 +69,35 @@ def payment_succeeded(conn, *, workspace_id: UUID, intent_id: UUID, amount: int,
     )
 
 
+def refund_succeeded(conn, *, workspace_id: UUID, intent_id: UUID, refund_id: UUID, amount: int, currency: str) -> None:
+    """Record `payment.refund.succeeded` in the refund's settlement transaction (once per refund).
+
+    The message key is the intent, like its payment, so the broker keeps the refund after its sale.
+    """
+    event_id = f"payment.refund.succeeded:{refund_id}"
+    envelope = {
+        "id": event_id,
+        "type": "payment.refund.succeeded",
+        "version": 1,
+        "occurred_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "producer": PRODUCER,
+        "correlation_id": str(intent_id),
+        "causation_id": f"payment.intent.succeeded:{intent_id}",
+        "data": {
+            "workspace_id": str(workspace_id),
+            "intent_id": str(intent_id),
+            "refund_id": str(refund_id),
+            "amount": amount,
+            "currency": currency,
+        },
+    }
+    conn.execute(
+        "INSERT INTO payment_outbox(id,workspace_id,topic,message_key,envelope) VALUES(%s,%s,%s,%s,%s)"
+        " ON CONFLICT (id) DO NOTHING",
+        (event_id, workspace_id, TOPIC, str(intent_id), Jsonb(envelope)),
+    )
+
+
 class Publisher(Protocol):
     def publish(self, topic: str, key: str, value: dict[str, Any]) -> None:
         """Return once the broker acknowledged the message; raise otherwise."""

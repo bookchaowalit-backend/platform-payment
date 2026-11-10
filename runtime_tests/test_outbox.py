@@ -1,4 +1,4 @@
-"""ADR-0008 outbox: a settled payment writes one domain event in the same transaction,
+"""ADR-0008 outbox: a settled payment or refund writes one domain event in the same transaction,
 tenant reads stay isolated, and the relay publishes in order with backoff on failure."""
 
 from uuid import UUID, uuid4
@@ -219,3 +219,41 @@ def test_relay_outbox_command_fails_without_leaking_configuration(fake_kafka, mo
     assert exit_info.value.code == 1
     err = capsys.readouterr().err
     assert "outbox relay failed" in err and "fixture-secret" not in err
+
+
+def test_a_settled_refund_writes_one_event_keyed_by_its_intent(billing):
+    from .billing_support import refund, signed
+
+    c, db, ws, _p, _ = billing
+    item = paid(c)
+    record = refund(c, item, 600, "refund-event").json()
+    failed = refund(c, item, 100, "refund-failed").json()
+
+    def settle(object_id, status, amount, event_id):
+        return signed(
+            c, kind="refund", object_id=object_id, status=status, amount=amount, currency="usd", event_id=event_id,
+        )
+
+    assert settle(failed["provider_object_id"], "failed", 100, "evt_refund_failed").status_code == 200
+    assert settle(record["provider_object_id"], "pending", 600, "evt_refund_pending").status_code == 200
+    assert [r[4]["type"] for r in outbox(db, ws)] == ["payment.intent.succeeded"], "pending/failed emit nothing"
+    assert settle(record["provider_object_id"], "succeeded", 600, "evt_refund_ok").status_code == 200
+    # A redelivered or late webhook settles nothing new and writes no second event.
+    assert settle(record["provider_object_id"], "succeeded", 600, "evt_refund_ok").json()["duplicate"] is True
+    assert settle(record["provider_object_id"], "succeeded", 600, "evt_refund_again").status_code == 200
+    rows = outbox(db, ws)
+    assert [r[4]["type"] for r in rows] == ["payment.intent.succeeded", "payment.refund.succeeded"]
+    row_id, workspace, topic, key, envelope, attempts, sent_at, _ = rows[1]
+    # Same message key as the payment, so Kafka keeps the refund after its sale.
+    assert (workspace, topic, key, attempts, sent_at) == (ws, TOPIC, item["id"], 0, None)
+    assert envelope["id"] == row_id == f"payment.refund.succeeded:{record['id']}"
+    assert envelope["correlation_id"] == item["id"]
+    assert envelope["causation_id"] == f"payment.intent.succeeded:{item['id']}"
+    assert envelope["data"] == {
+        "workspace_id": str(ws), "intent_id": item["id"], "refund_id": record["id"], "amount": 600, "currency": "usd",
+    }
+    assert type(envelope["data"]["amount"]) is int
+    assert set(envelope) == {"id", "type", "version", "occurred_at", "producer", "correlation_id", "causation_id", "data"}
+    publisher = FakePublisher()
+    assert relay_once(db, publisher).sent == 2
+    assert [s[2] for s in publisher.sent] == [rows[0][0], rows[1][0]]

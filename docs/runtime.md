@@ -276,6 +276,13 @@ writes one `payment.intent.succeeded` envelope (`id` = `payment.intent.succeeded
 the same transaction as the effect and the journal, so a rolled-back settlement
 writes no event and a redelivered webhook writes no second one.
 
+A refund that settles as `succeeded` writes one `payment.refund.succeeded` envelope
+the same way (`id` = `payment.refund.succeeded:<refund>`, `causation_id` = its payment's
+event id, `data` = workspace id, intent id, refund id, amount, currency). It uses the
+intent as message key, so it follows its payment in order. Pending and failed refunds
+write nothing. The lake's sales marts (data-lake-pipelines `docs/specs/sales-marts.md`)
+read both types.
+
 `python -m platform_payment relay-outbox [--limit N]` publishes unsent rows to
 Kafka topic `commerce.events.v1` (key = intent id) and marks them sent after the
 broker acknowledges. It needs `DATABASE_URL` and `PAYMENT_KAFKA_BOOTSTRAP`,

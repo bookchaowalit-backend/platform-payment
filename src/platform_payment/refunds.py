@@ -6,6 +6,7 @@ from platform_backend_core import require_scope
 from pydantic import BaseModel, ConfigDict, Field
 
 from .ledger import post
+from .outbox import refund_succeeded
 from .provider_operations import claim, invoke
 from .storage import fetch, inbox, transaction
 
@@ -203,6 +204,14 @@ def process(conn, provider, event, fingerprint, binding):
             workspace=row["workspace_id"],
             source_kind="refund_succeeded",
             source_id=row["id"],
+            intent_id=row["intent_id"],
+            amount=row["amount"],
+            currency=row["currency"],
+        )
+        refund_succeeded(
+            conn,
+            workspace_id=row["workspace_id"],
+            refund_id=row["id"],
             intent_id=row["intent_id"],
             amount=row["amount"],
             currency=row["currency"],
