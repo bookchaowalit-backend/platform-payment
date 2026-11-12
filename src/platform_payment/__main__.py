@@ -93,6 +93,10 @@ def main():
         )
         database = Database(dsn, max_size=int(os.environ.get("DATABASE_POOL_MAX", "8")))
         app = create_app(database, verifier)
+        from . import gateway
+
+        # SPEC-002 (platform-api-gateway): only calls that came through the edge gateway.
+        gateway.install(app, gateway.GatewayCheck.from_env('platform-payment'))
     except Exception:  # noqa: BLE001 - startup errors are reported without configuration values
         parser.exit(1, "invalid service configuration\n")
     import uvicorn
