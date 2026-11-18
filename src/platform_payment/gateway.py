@@ -40,6 +40,9 @@ OPEN_PATHS = (
     "/readyz",
     "/openapi.json",
     "/.well-known/",
+    # Stripe calls the webhook itself and cannot pass the gateway (no bearer token); the Stripe-Signature
+    # over the raw body authenticates it (API.md). Exact path only.
+    "/v1/webhooks/provider",
 )
 # A body the header says to wait for must arrive within this, or the request is "invalid" (a client that
 # sends a well-formed header and then stalls cannot hold the connection).

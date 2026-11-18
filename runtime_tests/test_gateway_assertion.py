@@ -273,6 +273,13 @@ def test_probe_paths_and_a_trailing_slash_stay_open():
         assert not gw.is_open(path), path
 
 
+def test_the_signed_provider_webhook_stays_open_and_nothing_else_under_it():
+    """Stripe posts straight to the service; its signature, not the gateway, authenticates it."""
+    assert gw.is_open("/v1/webhooks/provider")
+    for path in ("/v1/webhooks", "/v1/webhooks/provider/x", "/v1/webhooks/other", "/v1/payment-intents"):
+        assert not gw.is_open(path), path
+
+
 def test_a_stalled_body_is_answered_408_and_not_waited_on(monkeypatch):
     import asyncio
     from collections.abc import MutableMapping
