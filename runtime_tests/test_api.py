@@ -298,6 +298,34 @@ def test_readiness_requires_provider_and_migrated_rls_schema():
         assert c.get("/readyz").status_code == 503
 
 
+def test_docs_ui_is_not_served_and_metrics_needs_metrics_read():
+    from fastapi import HTTPException
+    from platform_backend_core import Principal
+
+    from platform_payment import create_app
+
+    class V:
+        def verify(self, authorization):
+            if not authorization:
+                raise HTTPException(401, "authentication required")
+            scopes = (
+                ["metrics:read"] if authorization == "Bearer metrics" else ["payments:write"]
+            )
+            return Principal(uuid4(), uuid4(), frozenset(scopes))
+
+    with TestClient(create_app(DisabledDatabase(), V())) as c:
+        for path in ("/docs", "/docs/oauth2-redirect", "/redoc"):
+            assert c.get(path).status_code == 404, path
+        assert c.get("/openapi.json").status_code == 200
+        assert c.get("/healthz").status_code == 200
+        assert c.get("/metrics").status_code == 401
+        assert c.get("/metrics", headers=OWN).status_code == 403
+        assert (
+            c.get("/metrics", headers={"Authorization": "Bearer metrics"}).status_code
+            == 200
+        )
+
+
 def test_stripe_sdk_is_bounded_and_supports_sync_service_calls():
     from platform_payment.adapters import StripeProvider
 

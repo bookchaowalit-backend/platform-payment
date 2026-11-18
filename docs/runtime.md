@@ -75,8 +75,10 @@ credentials or charges were used in verification.
 
 `/healthz` is process health. `/readyz` requires a configured adapter, exact
 migration history and FORCE RLS on all service tables; missing schema/config
-returns 503. It does not contact Stripe or certify credentials. `/metrics` uses
-bounded route templates/status labels; secure it through ingress. API request
+returns 503. It does not contact Stripe or certify credentials. `/metrics` needs the
+`metrics:read` scope (401 without a token, 403 without the scope) and uses bounded route
+templates/status labels. The Swagger and ReDoc UI (`/docs`, `/redoc`) is not served;
+`/openapi.json` stays public for the MCP hub's describe_cell. API request
 bodies are bounded at 1 MiB and requests at 30 seconds. Uvicorn access logging is
 disabled to avoid signed checkout URL/header/body exposure.
 

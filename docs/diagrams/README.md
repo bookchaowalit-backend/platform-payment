@@ -51,7 +51,7 @@ Hosted บน Railway (`payment-api`, Singapore, sleep) ตั้งแต่ 20
 - `/readyz` 503: ไม่มี `PAYMENT_STRIPE_API_KEY` (sandbox), `PAYMENT_STRIPE_WEBHOOK_SECRET`, `PAYMENT_SUCCESS_URL`, `PAYMENT_CANCEL_URL` บน Railway; `PAYMENT_PLAN_CATALOG_JSON` ก็ไม่มี (ดู 16)
 - DB ของ payment ไม่อยู่ใน nightly backup (`ops-backups/db-backup` `BACKUP_TARGETS` 31 ชื่อ ไม่มี payment); RTO/RPO ไม่ได้กำหนด (ดู 14)
 - ไม่อยู่ใน uptime worker; ไม่มี heartbeat หรือ alert ของ pending webhook (ดู 20, 21)
-- `/metrics`, `/docs`, `/openapi.json` เปิด public บน Railway URL (ดู 12, 13)
+- `/openapi.json` เปิด public บน Railway URL (ตั้งใจ); `/metrics` ต้องมี scope `metrics:read`; `/docs` ไม่ถูกเสิร์ฟแล้ว (ดู 12, 13)
 - Stripe webhook ต้องเข้า Railway URL ตรง เพราะ gateway ต้องการ Bearer และไม่ forward `Stripe-Signature` (ดู 03, 12)
 - `main` ไม่มี branch protection; deploy เป็น CLI ไม่มี commit hash → lead time วัดไม่ได้ (ดู 18, 22)
 - docs ล้าหลัง: `PRODUCT.md` บอก Sentry no-op จนกว่าตั้ง DSN แต่ `SENTRY_DSN` ตั้งแล้ว; `docs/UPGRADE-PLAN.md` ยังบอก "no runtime implementation"; `PRODUCT.md` อ้าง `fixtures/gates/` ที่ไม่มีอยู่ (ดู 04, 20)

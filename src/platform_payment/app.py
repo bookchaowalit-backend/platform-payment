@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 
 from fastapi import Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from platform_backend_core import create_app as core_app
 from platform_backend_core import require_scope
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -33,6 +34,8 @@ READINESS_PERMISSIONS = {
     # ADR-0008 outbox: settlement inserts; relay-outbox reads and marks rows sent.
     "payment_outbox": ("SELECT", "INSERT", "UPDATE"),
 }
+# The docs UI and /metrics are not public; /openapi.json stays public for the MCP hub's describe_cell.
+NOT_PUBLIC = frozenset({"/docs", "/docs/oauth2-redirect", "/redoc", "/metrics"})
 
 class Payment(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -83,6 +86,23 @@ def create_app(
     app.router.routes[:] = [
         r for r in app.router.routes if getattr(r, "path", None) != "/readyz"
     ]
+    # Only probes, the API and its schema are public: no docs UI, and metrics need a scope.
+    metrics = next(
+        r.endpoint
+        for r in app.router.routes
+        if isinstance(r, APIRoute) and r.path == "/metrics"
+    )
+    app.router.routes[:] = [
+        r for r in app.router.routes if getattr(r, "path", None) not in NOT_PUBLIC
+    ]
+    app.docs_url = app.redoc_url = None
+    app.add_api_route(
+        "/metrics",
+        metrics,
+        methods=["GET"],
+        include_in_schema=False,
+        dependencies=[Depends(require_scope("metrics:read"))],
+    )
 
     @app.get("/readyz", include_in_schema=False)
     def readiness():

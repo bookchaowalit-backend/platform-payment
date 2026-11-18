@@ -8,8 +8,8 @@
 |---|---|---|---|---|
 | GET | `/healthz` | public | — | 200 |
 | GET | `/readyz` | public | — | 200 / 503 |
-| GET | `/metrics` | **public** (core) | — | 200 Prometheus text |
-| GET | `/openapi.json`, `/docs` | **public** (FastAPI defaults; core `FastAPI(...)` ไม่ปิด `docs_url`/`openapi_url`) | — | 200 |
+| GET | `/metrics` | **`metrics:read` scope** (re-mounted in `create_app`) | — | 200 Prometheus text; 401 without token, 403 without scope |
+| GET | `/openapi.json` | **public** (kept on purpose: MCP hub's describe_cell reads it) | — | 200; `/docs`, `/redoc` removed (404) |
 | POST | `/v1/payment-intents` | `payments:write` | `Idempotency-Key` 1..128 required; scope = workspace + `intent` + key | 201 / 200 replay / 202 creating or unknown / 409 changed payload / 503 no provider |
 | POST | `/v1/checkout` | `payments:write` | same, operation `checkout` | same |
 | POST | `/v1/payment-intents/{id}/reconcile` | `payments:write` | reuses saved `provider_key`; fenced 60 s lease | 200 / 202 leased or unknown / 409 provider changed or > 20 h / 404 |

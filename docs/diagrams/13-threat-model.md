@@ -17,7 +17,7 @@ flowchart LR
   subgraph RW["Boundary 3: Railway service payment-api"]
     API["FastAPI routes, require_scope, 1 MiB, 30 s"]
     WH["POST /v1/webhooks/provider, signature check"]
-    PUB["healthz, readyz, metrics, docs, openapi.json"]
+    PUB["healthz, readyz, openapi.json"]
   end
   subgraph DATA["Boundary 4: Neon project platform-payment"]
     DB[("11 FORCE RLS tables, runtime role NOSUPERUSER NOBYPASSRLS")]
@@ -59,7 +59,7 @@ Sources: `src/platform_payment/app.py`, `adapters.py`, `storage.py`, `pending_we
 | Pending spool | **I** tenant lists unbound events | RLS `verified_provider_event`; replay context ตั้งได้เฉพาะ CLI | ไม่มี retention policy |
 | Ledger | **T** edit history, over-refund | append-only triggers, statement balance trigger, `payment_refund_balance` CHECK, refund reservation under row lock | — |
 | Live money | **E** run against live Stripe | `refuse_live_mode` at startup, CLI, every `/readyz`; test keys only; live events 400 | Infisical `/stripe` เก็บแต่ live keys (ops record) — code ปฏิเสธแต่ human error ยังเป็นไปได้ |
-| Public probes | **I** service fingerprinting | `/readyz` 503 without detail; metrics use route templates only | `/metrics`, `/docs`, `/openapi.json` public on Railway URL (`docs/runtime.md`: secure metrics through ingress) |
+| Public probes | **I** service fingerprinting | `/readyz` 503 without detail; metrics use route templates only | `/openapi.json` public (intentional); `/metrics` needs `metrics:read`; `/docs` UI removed. Before this fix `/metrics` and `/docs` were public on the Railway URL |
 | Logs | **I** secrets in logs | uvicorn access log off; core logs route, status, correlation id only; errors never include config values | Railway log retention ไม่ได้ตรวจ |
 | Sentry egress | **I** PII / secrets | no tracing, no locals, no request data, no free text (`_scrub_event`); `SENTRY_DSN` is set on Railway | — |
 | Operator CLI | **E** / **R** | live-key refusal exit 2; replay bounded 1..100, attempts < 20; errors redacted | ไม่มี audit event ของ operator action; DB credential = trusted infrastructure |
