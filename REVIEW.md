@@ -29,7 +29,9 @@ Treat these as `[P0]`/`[P1]`:
 
 ## Skip
 
-- `uv.lock`, `build/`, `*.egg-info`, `__pycache__/`, `.pytest_cache/`, `DOCPACK/pdf/`.
+- `uv.lock` hashes and generated metadata. Still review changed versions or sources and the
+  `platform-backend-core` commit, which must match `[tool.uv.sources]` (`tests/test_build_hygiene.py`).
+- `build/`, `*.egg-info`, `__pycache__/`, `.pytest_cache/`, `DOCPACK/pdf/`.
 - Vendored `schema/` changes only from the canonical copy.
 
 ## Evidence
