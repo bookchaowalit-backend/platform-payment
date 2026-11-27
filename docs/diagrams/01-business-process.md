@@ -1,8 +1,10 @@
 # 01 — Business process (As-Is / To-Be)
 
 repo นี้คือ platform boundary ของ capability `payment` (payment intent, checkout, billing, ledger, reconciliation) ตาม `contract.json`
-runtime v1 ใน `src/platform_payment` เป็น **test-mode only** (Stripe sandbox) และ hosted บน Railway แล้วแต่ `/readyz` ยัง 503 เพราะยังไม่มี sandbox key (ดู 16)
+runtime v1 ใน `src/platform_payment` เป็น **test-mode only** (Stripe sandbox) และ hosted บน Railway (`docs/runtime.md` §Outbox, `platform-api-gateway` `assertion-status.json`) แต่ `PRODUCT.md` ยังเขียนว่า "Not deployed" และสถานะ `/readyz` วันนี้ (เดิมระบุ 503 เพราะยังไม่มี sandbox key) [ต้องยืนยัน]
 งานจ่ายเงินจริง (live Stripe) ยังอยู่ที่ระบบเดิม: `infra/api/stripe.ts` / `infra/api/server.ts` ใน `solo-empire` และ live webhook อยู่ที่ `bookchaowalit/platform-webhooks-worker` (owner decision D8)
+
+Last reviewed: 2026-11-27 · commit `7b0fb74`
 
 ## As-Is: one-time payment (จากโค้ดวันนี้)
 
@@ -25,9 +27,11 @@ flowchart TD
   Y -->|"no"| Z["409, Stripe retries; ignored after 3 deliveries for payment_intent events"]
   Y -->|"yes, amount and currency match"| S["One transaction: inbox row, status change, payment_effects, ledger journal"]
   S --> T["Intent succeeded: provider_clearing debit, payment_revenue credit"]
+  S --> OB["Same transaction: payment_outbox envelope payment.intent.succeeded"]
+  OB --> RL["payment-relay cron :50 UTC: relay-outbox to Kafka commerce.events.v1"]
 ```
 
-Sources: `src/platform_payment/app.py`, `src/platform_payment/adapters.py`, `src/platform_payment/event_router.py`, `src/platform_payment/payment_events.py`, `src/platform_payment/pending_webhooks.py`, `src/platform_payment/ledger.py`, `docs/runtime.md`
+Sources: `src/platform_payment/app.py`, `src/platform_payment/adapters.py`, `src/platform_payment/event_router.py`, `src/platform_payment/payment_events.py`, `src/platform_payment/pending_webhooks.py`, `src/platform_payment/ledger.py`, `docs/runtime.md` (§Outbox)
 
 ## As-Is: subscription billing และ refund
 
@@ -43,7 +47,7 @@ flowchart TD
   RF["Caller, scope payments:refund"] --> R["POST /v1/payment-intents/id/refunds amount"]
   R --> R1["Lock paid intent, reserve amount against available balance"]
   R1 --> R2["Stripe refund with provider idempotency key"]
-  R2 --> R3["refund.* webhook: succeeded moves reservation to refunded and posts ledger journal; failed releases it"]
+  R2 --> R3["refund.* webhook: succeeded moves reservation to refunded and posts ledger journal and writes payment.refund.succeeded to the outbox; failed releases it"]
 ```
 
 Sources: `src/platform_payment/billing_checkouts.py`, `src/platform_payment/catalog.py`, `src/platform_payment/subscriptions.py`, `src/platform_payment/billing_events.py`, `src/platform_payment/stripe_events.py`, `src/platform_payment/stripe_billing.py`, `src/platform_payment/refunds.py`, `docs/billing-runtime.md`
@@ -66,6 +70,18 @@ flowchart LR
 ```
 
 Sources: `docs/runtime.md` §Staging plan, `README.md` §Migration gate, `contract.json` (`migration`, `migration_gates`), `docs/CONTRACT-SURFACE.md` §Migration gates
+
+## Gap
+
+| ID | As-Is → To-Be | Status | Owner | Evidence |
+|---|---|---|---|---|
+| G1 | runtime v1 เป็น sandbox-only, ไม่มี staging ที่รันจริง → staging บน Stripe sandbox ตาม plan 9 ขั้น | todo | claude | `docs/runtime.md` §Staging plan (not executed) |
+| G2 | shadow parity และ cutover `pending` → parity บน sandbox, rollback rehearsal, evidence ใน registry | todo | claude | `contract.json` `migration`, `README.md` §Migration gate |
+| G3 | live Stripe อยู่ที่ platform-webhooks-worker → live activation ของ service นี้ | decide | owner | `docs/runtime.md` §Staging plan ข้อ 1 และ 9 (D8 คงไว้; live activation เป็น owner decision แยก) |
+| G4 | ไม่มี Stripe webhook fixtures และ Python port ของ verifyStripeSignature ตาม UPGRADE-PLAN → มี fixtures ครบ | todo | claude | `docs/UPGRADE-PLAN.md` P0 (ตรวจว่ายังจริงหลัง runtime [ต้องยืนยัน]) |
+| G5 | `POST /api/webhook/revenue` อยู่ระบบเดิม → ย้ายมา platform หรือไม่ | decide | owner | `docs/UPGRADE-PLAN.md` P0; ไม่มี To-Be ที่เขียนไว้ |
+| G6 | capability `reconciliation` ใน contract ไม่มีโค้ด financial reconciliation → มี | decide | owner | `contract.json` capabilities, `docs/runtime.md` (does not implement financial reconciliation); ไม่มี To-Be ที่เขียนไว้ |
+| G7 | outbox payment events relay รายชั่วโมง → ทำแล้ว | done | claude | `docs/runtime.md` §Outbox (hosted 2026-11-09, `payment-relay`) |
 
 ## Open questions
 
